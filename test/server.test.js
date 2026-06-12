@@ -6,6 +6,7 @@ import { normalizeScore } from "../lib/scoresProvider.js";
 import { buildScorecard, bandOf } from "../lib/scorecard.js";
 import { allowAction, _reset as resetRl } from "../lib/rateLimit.js";
 import { fetchWithFailover, apiKeys } from "../lib/providerFetch.js";
+import { stageLabel } from "../lib/fixtures.js";
 
 const rawEvent = {
   id: "evt1",
@@ -114,6 +115,23 @@ test("buildScorecard empty -> zeros", () => {
   const sc = buildScorecard([]);
   assert.equal(sc.played, 0);
   assert.equal(sc.totalPoints, 0);
+});
+
+// ---- fixtures / stage labelling ----
+test("stageLabel: group-stage match shows the correct group", () => {
+  // Mexico v South Africa are both Group A, kickoff in group window
+  assert.equal(stageLabel("Mexico", "South Africa", "2026-06-11T19:00:00Z"), "Group Stage · Group A");
+  // USA v Paraguay are both Group D
+  assert.equal(stageLabel("USA", "Paraguay", "2026-06-13T01:00:00Z"), "Group Stage · Group D");
+});
+
+test("stageLabel: knockout dates map to rounds", () => {
+  assert.equal(stageLabel("TBD", "TBD", "2026-07-02T19:00:00Z"), "Round of 16");
+  assert.equal(stageLabel("TBD", "TBD", "2026-07-18T19:00:00Z"), "Final");
+});
+
+test("stageLabel: unknown team in group window falls back to Group Stage", () => {
+  assert.equal(stageLabel("Atlantis", "Wakanda", "2026-06-15T19:00:00Z"), "Group Stage");
 });
 
 // ---- provider key failover ----
