@@ -24,6 +24,33 @@ export default function MethodologyPage() {
         </div>
       </section>
 
+      {/* What we fetch */}
+      <section className="m-section">
+        <h2 className="m-h2">What we fetch</h2>
+        <p className="m-lead">
+          Just two markets from one bookmaker (Pinnacle, the sharpest), in a single API
+          call — 2 credits for every match at once:
+        </p>
+        <div className="fetchgrid">
+          <div className="fetchcard">
+            <span className="fetch-k">h2h</span>
+            <span className="fetch-d">Match result — three decimal prices: home win, draw, away win.</span>
+            <span className="fetch-ex">e.g. 1.50 / 4.20 / 6.50</span>
+          </div>
+          <div className="fetchcard">
+            <span className="fetch-k">totals</span>
+            <span className="fetch-d">Over/under total goals at one line (often 2.5), with both prices.</span>
+            <span className="fetch-ex">e.g. Over 2.5 @ 1.95</span>
+          </div>
+        </div>
+        <p className="m-cap">
+          The result market tells us <em>who</em> wins; the totals market tells us{" "}
+          <em>how many goals</em>. Together they&apos;re enough to reconstruct every
+          scoreline. We deliberately skip pricier markets (correct-score, handicaps) — they
+          add cost and noise without changing the answer much.
+        </p>
+      </section>
+
       {/* Pipeline */}
       <section className="m-section">
         <h2 className="m-h2">The pipeline</h2>
@@ -37,10 +64,12 @@ export default function MethodologyPage() {
       <section className="m-section">
         <h2 className="m-h2"><span className="step-num">1</span> Strip the bookmaker margin</h2>
         <p>
-          Bookmakers&apos; odds are the sharpest forecast available, but they bake in a
-          profit margin so the implied probabilities sum to more than 100%. We use{" "}
-          <strong>Shin&apos;s method</strong> to remove it and recover fair probabilities
-          that better handle big favourites.
+          A decimal odd implies a probability of 1/odds. But across the three results those
+          don&apos;t add up to 100% — the excess is the bookmaker&apos;s built-in margin
+          (the &ldquo;overround&rdquo;, typically 4–6% on the match result). We remove it
+          with <strong>Shin&apos;s method</strong>, which assumes part of the margin comes
+          from informed (&ldquo;insider&rdquo;) money and so trims favourites and longshots
+          differently — more realistically than a flat rescale.
         </p>
         <div className="formula">
           <span className="fl">p<sub>i</sub></span> ={" "}
@@ -51,17 +80,30 @@ export default function MethodologyPage() {
         </div>
         <p className="m-cap">
           where π<sub>i</sub> = 1/odds<sub>i</sub>, B = Σπ<sub>i</sub> (the booksum), and
-          z is solved so the fair probabilities sum to 1.
+          z (the insider share, between 0 and 1) is solved by bisection so the fair
+          probabilities sum to exactly 1.
         </p>
       </section>
 
       {/* Step 2 */}
       <section className="m-section">
-        <h2 className="m-h2"><span className="step-num">2</span> Back out expected goals</h2>
+        <h2 className="m-h2"><span className="step-num">2</span> Back out expected goals (λ)</h2>
         <p>
-          From those probabilities we solve for each team&apos;s scoring rate, λ (expected
-          goals). A strong favourite might come out around λ<sub>home</sub> = 2.1 versus
-          λ<sub>away</sub> = 0.6.
+          Now we have four fair targets: the home/draw/away probabilities <em>and</em> the
+          over-line probability. We search for the pair of scoring rates{" "}
+          <span className="mono">λ<sub>home</sub></span> and{" "}
+          <span className="mono">λ<sub>away</sub></span> whose scoreline grid reproduces all
+          four as closely as possible, minimising:
+        </p>
+        <div className="formula small">
+          cost = (P̂<sub>H</sub>−P<sub>H</sub>)² + (P̂<sub>D</sub>−P<sub>D</sub>)² +
+          (P̂<sub>A</sub>−P<sub>A</sub>)² + (P̂<sub>over</sub>−P<sub>over</sub>)²
+        </div>
+        <p className="m-cap">
+          P are the market targets; P̂ are what a candidate (λ<sub>h</sub>, λ<sub>a</sub>)
+          predicts. A coarse-to-fine grid search (step 0.1, then 0.02) finds the best pair.
+          The result probabilities set the <em>split</em> of goals; the totals line fixes
+          the <em>volume</em>.
         </p>
       </section>
 
@@ -69,41 +111,86 @@ export default function MethodologyPage() {
       <section className="m-section">
         <h2 className="m-h2"><span className="step-num">3</span> Build every scoreline</h2>
         <p>
-          The probability of each exact scoreline comes from a Poisson model (with a
-          Dixon-Coles correction that fixes low-scoring games):
+          With λ in hand, the probability of any exact score (home h, away a) is two Poisson
+          distributions multiplied together, times a correction:
         </p>
         <div className="formula">
           P(h, a) ={" "}
           <span className="frac"><span className="num">λ<sub>h</sub><sup>h</sup> e<sup>−λ<sub>h</sub></sup></span><span className="den">h!</span></span>
           ·
           <span className="frac"><span className="num">λ<sub>a</sub><sup>a</sup> e<sup>−λ<sub>a</sub></sup></span><span className="den">a!</span></span>
-          · τ
+          · τ(h, a)
         </div>
-        <p className="m-cap">τ is the Dixon-Coles adjustment for the 0-0, 1-0, 0-1 and 1-1 scores.</p>
+        <p>
+          Plain Poisson slightly misprices the lowest scores — real football has more 0-0s
+          and 1-1s than independence predicts. The <strong>Dixon-Coles</strong> factor{" "}
+          <span className="mono">τ</span> corrects exactly those four cells:
+        </p>
+        <div className="formula small">
+          τ(0,0)=1−λ<sub>h</sub>λ<sub>a</sub>ρ &nbsp;·&nbsp; τ(0,1)=1+λ<sub>h</sub>ρ &nbsp;·&nbsp;
+          τ(1,0)=1+λ<sub>a</sub>ρ &nbsp;·&nbsp; τ(1,1)=1−ρ
+        </div>
+        <p className="m-cap">
+          ρ ≈ −0.05 nudges draws up; everything else is τ = 1. The full grid (0–8 goals each
+          side) is then normalised to sum to 1.
+        </p>
       </section>
 
       {/* Step 4 */}
       <section className="m-section">
         <h2 className="m-h2"><span className="step-num">4</span> Pick the highest expected points</h2>
         <p>
-          For every scoreline you <em>could</em> pick, we compute the average points it
-          earns across all the ways the match might end, and choose the best one:
+          For every scoreline you <em>could</em> pick, sum its Superbru points over the whole
+          grid, weighted by how likely each actual result is — then choose the best:
         </p>
         <div className="formula">
-          EV(pick) = Σ<sub>all scores</sub> P(score) · points(pick, score)
+          EV(pick) = Σ<sub>all (h,a)</sub> P(h, a) · points(pick, (h, a))
         </div>
       </section>
 
-      {/* The key insight with a chart */}
+      {/* Worked example */}
       <section className="m-section highlight">
-        <h2 className="m-h2">Why the best pick isn&apos;t the most likely score</h2>
-        <p>
-          Because &ldquo;close&rdquo; pays 1.5, a <strong>central</strong> pick that&apos;s
-          near many likely scores beats an isolated one. Below: for a favourite, 1-0 is the
-          single most likely score, but <strong>2-0 earns more on average</strong> — it
-          collects partial credit from 1-0, 2-1, 3-0 and 3-1.
+        <h2 className="m-h2">A worked example, end to end</h2>
+        <p className="m-lead">
+          A favourite at home. Odds <span className="mono">1.50 / 4.20 / 6.50</span>, with
+          Over 2.5 priced at <span className="mono">1.95</span>.
         </p>
+        <ol className="worked">
+          <li>
+            <strong>Implied probabilities.</strong> 1/1.50 = 0.667, 1/4.20 = 0.238,
+            1/6.50 = 0.154 — summing to <span className="mono">1.059</span>, a{" "}
+            <strong>5.9% margin</strong> to remove.
+          </li>
+          <li>
+            <strong>Shin de-vig.</strong> Solving gives insider share{" "}
+            <span className="mono">z = 0.030</span> and fair probabilities{" "}
+            <span className="mono">64.3%</span> / <span className="mono">22.0%</span> /{" "}
+            <span className="mono">13.7%</span>. The Over 2.5 price de-vigs to{" "}
+            <span className="mono">~50%</span>.
+          </li>
+          <li>
+            <strong>Solve for λ.</strong> The grid search lands on{" "}
+            <span className="mono">λ<sub>home</sub> = 1.92</span>,{" "}
+            <span className="mono">λ<sub>away</sub> = 0.76</span> — the rates that reproduce
+            a 64/22/14 split with a coin-flip on over 2.5.
+          </li>
+          <li>
+            <strong>Build the grid.</strong> That yields{" "}
+            <span className="mono">1-0 = 12.7%</span>,{" "}
+            <span className="mono">2-0 = 12.6%</span>,{" "}
+            <span className="mono">0-0 = 7.4%</span>, and so on.
+          </li>
+          <li><strong>Score every pick</strong> by expected points:</li>
+        </ol>
         <CentralPickChart />
+        <p style={{ marginTop: 12 }}>
+          <strong>Verdict: pick 2-0.</strong> <span className="mono">1-0</span> is the single
+          most <em>likely</em> score (12.7% vs 12.6%), but <span className="mono">2-0</span>{" "}
+          wins on <em>expected points</em> (1.08 vs 1.01): it sits in the middle of the
+          cluster of likely home wins (1-0, 2-1, 3-0, 3-1), so it banks the 1.5
+          &ldquo;close&rdquo; bonus far more often. That gap is the entire edge this tool
+          finds.
+        </p>
       </section>
 
       {/* Draws */}
@@ -163,13 +250,13 @@ function Pipeline() {
 }
 
 function CentralPickChart() {
-  // EV values from the model for a ~2.0/0.6 favourite (illustrative, matches app output).
+  // EV values from the model for the worked-example favourite (λ 1.92/0.76).
   const data = [
-    { pick: "1-0", ev: 1.05, prob: 0.151 },
-    { pick: "2-0", ev: 1.10, prob: 0.138, best: true },
-    { pick: "2-1", ev: 0.99, prob: 0.091 },
-    { pick: "3-0", ev: 0.92, prob: 0.081 },
-    { pick: "0-0", ev: 0.77, prob: 0.090 },
+    { pick: "1-0", ev: 1.01, prob: 0.127 },
+    { pick: "2-0", ev: 1.08, prob: 0.126, best: true },
+    { pick: "2-1", ev: 1.00, prob: 0.096 },
+    { pick: "3-0", ev: 0.93, prob: 0.081 },
+    { pick: "0-0", ev: 0.77, prob: 0.074 },
   ];
   const W = 460, H = 220, padL = 40, padB = 34, padT = 12;
   const maxEv = 1.2;
