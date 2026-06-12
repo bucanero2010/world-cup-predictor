@@ -48,12 +48,6 @@ export default function MatchList({ initial }) {
 
   return (
     <div>
-      {initial?.stale && (
-        <div className="warning">
-          {initial.warning || "Showing cached odds; data may be out of date."}
-        </div>
-      )}
-
       <div className="controls">
         <select value={filter} onChange={(e) => setFilter(e.target.value)}>
           <option value="all">All matches</option>
@@ -71,11 +65,6 @@ export default function MatchList({ initial }) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
-        {initial?.fetchedAt && (
-          <span className="updated">
-            updated {formatKickoff(initial.fetchedAt)}
-          </span>
-        )}
       </div>
 
       {byDay.length === 0 && <p className="note">No matches to show.</p>}

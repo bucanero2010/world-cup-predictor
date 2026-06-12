@@ -1,54 +1,38 @@
-// GET /api/matches — returns the cached recommendation snapshot, refetching from the
-// provider on a stale/empty cache. Falls back to last-good data on provider failure.
+// GET /api/matches — pure DB read. No provider calls. Returns matches, the tournament
+// scorecard, last-updated metadata, and an empty flag for the first-run prompt.
 
 import { NextResponse } from "next/server";
-import { fetchAllOdds } from "@/lib/oddsProvider.js";
-import { getCachedMatches, setCachedMatches, isStale } from "@/lib/cache.js";
-import { buildCard, byKickoff } from "@/lib/card.js";
+import { getAllMatches, getMeta, initSchema } from "@/lib/db.js";
+import { buildScorecard } from "@/lib/scorecard.js";
+import { kickoffState } from "@/lib/time.js";
 
 export const dynamic = "force-dynamic";
 
-// Baseline full-list refresh window. The two-tier strategy keeps this infrequent;
-// per-event manual refresh handles imminent matches.
-const SNAPSHOT_MAX_AGE_MS = 6 * 60 * 60 * 1000; // 6h
+/** Promote stored status using live kickoff timing (closed always wins). */
+function withLiveStatus(card) {
+  if (card.status === "closed" || card.status === "pending") return card;
+  const state = kickoffState(card.commenceTimeUtc); // upcoming | live | finished
+  // "finished" by clock but not yet confirmed via results stays as-is (upcoming/live);
+  // we only surface live so the row can badge it.
+  return { ...card, status: state === "live" ? "live" : "upcoming" };
+}
 
 export async function GET() {
-  if (!process.env.ODDS_API_KEY) {
-    // Never leak whether/what the key is; just signal misconfiguration.
-    return NextResponse.json(
-      { matches: [], stale: true, warning: "Server is missing odds configuration." },
-      { status: 500 }
-    );
-  }
-
-  const cached = await getCachedMatches();
-
-  // Serve fresh-enough cache directly.
-  if (cached && !isStale(cached, SNAPSHOT_MAX_AGE_MS)) {
-    return NextResponse.json({ ...cached, stale: false });
-  }
-
-  // Need a (re)fetch.
   try {
-    const normalized = await fetchAllOdds();
-    const matches = normalized.map(buildCard).sort(byKickoff);
-    const snapshot = { matches, fetchedAt: new Date().toISOString() };
-    await setCachedMatches(snapshot);
-    return NextResponse.json({ ...snapshot, stale: false });
+    await initSchema();
+    const raw = await getAllMatches();
+    const matches = raw.map(withLiveStatus);
+    const scorecard = buildScorecard(matches.filter((m) => m.status === "closed"));
+    const meta = {
+      oddsLastRefreshed: await getMeta("odds_last_refreshed"),
+      resultsLastUpdated: await getMeta("results_last_updated"),
+    };
+    return NextResponse.json({ matches, scorecard, meta, empty: matches.length === 0 });
   } catch (err) {
-    // Resilience: fall back to last good snapshot with a staleness warning.
-    if (cached) {
-      return NextResponse.json({
-        ...cached,
-        stale: true,
-        warning: "Showing cached odds; the provider is currently unavailable.",
-      });
-    }
-    return NextResponse.json({
-      matches: [],
-      fetchedAt: null,
-      stale: true,
-      warning: "Odds are temporarily unavailable. Please try again shortly.",
-    });
+    // DB unavailable: report empty rather than crash; UI shows a prompt/error.
+    return NextResponse.json(
+      { matches: [], scorecard: { played: 0, totalPoints: 0, counts: { exact: 0, close: 0, result: 0, wrong: 0 } }, meta: {}, empty: true, error: "Storage unavailable." },
+      { status: 200 }
+    );
   }
 }

@@ -1,39 +1,43 @@
 import Link from "next/link";
-import { fetchAllOdds } from "@/lib/oddsProvider.js";
-import { getCachedMatches, setCachedMatches, isStale } from "@/lib/cache.js";
-import { buildCard, byKickoff } from "@/lib/card.js";
+import { getAllMatches, getMeta, initSchema } from "@/lib/db.js";
+import { buildScorecard } from "@/lib/scorecard.js";
+import { kickoffState } from "@/lib/time.js";
 import MatchList from "@/components/MatchList.jsx";
+import ActionBar from "@/components/ActionBar.jsx";
+import Scorecard from "@/components/Scorecard.jsx";
 
 export const dynamic = "force-dynamic";
 
-const SNAPSHOT_MAX_AGE_MS = 6 * 60 * 60 * 1000;
+function withLiveStatus(card) {
+  if (card.status === "closed" || card.status === "pending") return card;
+  return { ...card, status: kickoffState(card.commenceTimeUtc) === "live" ? "live" : "upcoming" };
+}
 
-// Server-side: build the initial snapshot directly (same logic as GET /api/matches),
-// so the first paint has data without a client round-trip.
-async function getInitial() {
-  if (!process.env.ODDS_API_KEY) {
-    return { matches: [], fetchedAt: null, stale: true, warning: "Server is missing odds configuration." };
-  }
-  const cached = await getCachedMatches();
-  if (cached && !isStale(cached, SNAPSHOT_MAX_AGE_MS)) {
-    return { ...cached, stale: false };
-  }
+async function getData() {
   try {
-    const normalized = await fetchAllOdds();
-    const matches = normalized.map(buildCard).sort(byKickoff);
-    const snapshot = { matches, fetchedAt: new Date().toISOString() };
-    await setCachedMatches(snapshot);
-    return { ...snapshot, stale: false };
+    await initSchema();
+    const raw = await getAllMatches();
+    const matches = raw.map(withLiveStatus);
+    const scorecard = buildScorecard(matches.filter((m) => m.status === "closed"));
+    const meta = {
+      oddsLastRefreshed: await getMeta("odds_last_refreshed"),
+      resultsLastUpdated: await getMeta("results_last_updated"),
+    };
+    return { matches, scorecard, meta, empty: matches.length === 0 };
   } catch {
-    if (cached) {
-      return { ...cached, stale: true, warning: "Showing cached odds; the provider is currently unavailable." };
-    }
-    return { matches: [], fetchedAt: null, stale: true, warning: "Odds are temporarily unavailable." };
+    return {
+      matches: [],
+      scorecard: { played: 0, totalPoints: 0, counts: { exact: 0, close: 0, result: 0, wrong: 0 } },
+      meta: {},
+      empty: true,
+      error: "Storage unavailable. Check POSTGRES_URL.",
+    };
   }
 }
 
 export default async function Page() {
-  const initial = await getInitial();
+  const data = await getData();
+
   return (
     <main className="wrap">
       <div className="header">
@@ -48,7 +52,20 @@ export default async function Page() {
           Calculator →
         </Link>
       </div>
-      <MatchList initial={initial} />
+
+      <Scorecard scorecard={data.scorecard} />
+      <ActionBar meta={data.meta} />
+
+      {data.error && <div className="warning">{data.error}</div>}
+
+      {data.empty ? (
+        <div className="emptyprompt">
+          No matches loaded yet. Click <strong>Refresh odds</strong> to fetch the
+          fixtures and recommendations.
+        </div>
+      ) : (
+        <MatchList initial={data} />
+      )}
     </main>
   );
 }

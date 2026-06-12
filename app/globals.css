@@ -358,3 +358,140 @@ th {
   font-size: 0.8rem;
   color: var(--muted);
 }
+
+/* ---- scorecard ---- */
+.scorecard {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 18px;
+  margin-bottom: 16px;
+}
+
+.scorecard.empty {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.sctotal {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.scpoints {
+  font-size: 2rem;
+  font-weight: 700;
+  color: var(--good);
+}
+
+.sclabel {
+  color: var(--muted);
+  font-size: 0.9rem;
+}
+
+.scbands {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.scband {
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-size: 0.82rem;
+  background: var(--panel-2);
+}
+
+.scband.exact { color: var(--good); }
+.scband.wrong { color: #ff8080; }
+
+/* ---- action bar ---- */
+.actionbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.actionbtns {
+  display: flex;
+  gap: 10px;
+}
+
+button.secondary {
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  color: var(--text);
+  font-weight: 600;
+  border-radius: 10px;
+  padding: 12px 20px;
+  cursor: pointer;
+  font-size: 0.95rem;
+}
+
+button.primary:disabled,
+button.secondary:disabled {
+  opacity: 0.6;
+  cursor: default;
+}
+
+.actionmeta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+
+.actionmsg {
+  color: var(--text);
+}
+
+.emptyprompt {
+  background: var(--panel);
+  border: 1px dashed var(--line);
+  border-radius: 12px;
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+}
+
+/* ---- closed match ---- */
+.matchrow.closed {
+  opacity: 0.85;
+  border-color: #33405f;
+  background: #11162a;
+}
+
+.closedbadge {
+  background: #3a3f52;
+  color: #c7cee3;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-weight: 600;
+}
+
+.closedresult {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+}
+
+.finalscore {
+  font-size: 1.3rem;
+  font-weight: 700;
+}
+
+.earned {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.earned.exact { color: var(--good); }
+.earned.close { color: #8fd9c0; }
+.earned.wrong { color: #ff8080; }

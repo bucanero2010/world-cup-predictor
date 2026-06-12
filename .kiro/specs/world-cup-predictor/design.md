@@ -3,89 +3,153 @@
 ## Overview
 
 World Cup Predictor is a Next.js (App Router) application deployed on Vercel. It lists
-every 2026 World Cup match, ingests live betting odds from The Odds API, and recommends
-the Superbru scoreline that maximizes expected points per match.
+every 2026 World Cup match, recommends the Superbru scoreline that maximizes expected
+points per match, and tracks how those recommendations performed once matches finish.
 
-The architecture has three layers:
+Data is persisted in **Neon (Vercel-managed Postgres)**. Page loads read exclusively from the database
+(zero provider calls). The Odds API is contacted only on two explicit user actions:
+**Refresh odds** (full-list odds fetch) and **Update results** (scores fetch). Finalized
+matches are frozen as "Closed" with their final score, the recommendation the app made,
+and the points it earned; a scorecard aggregates those points.
 
-1. **Modeling core (`lib/`)** — framework-agnostic, pure functions, unit-tested. Already
-   exists (`scoring`, `poisson`, `optimizer`) and is extended here (`odds` de-vig +
-   solver, plus new `shin`, `recommend`).
-2. **Server layer (route handlers)** — the only place the Odds API key is used. Fetches,
-   validates, caches, and transforms provider data into recommendation payloads.
-3. **Client layer (React components)** — renders the match list, detail breakdowns,
-   timezone-localized times, flags, lock-soon highlighting, filtering/search, and the
-   standalone calculator. Never sees the API key or raw provider data.
+The architecture has four layers:
 
-Design priorities, in order: correctness of the model, staying within the free-tier
-quota, resilience when the provider misbehaves, and a fast, legible UI.
+1. **Modeling core (`lib/`)** — framework-agnostic, pure functions, unit-tested
+   (`scoring`, `poisson`, `optimizer`, `odds`, `shin`, `recommend`, `bookmaker`, `time`,
+   `lockSoon`, `flags`).
+2. **Persistence (`lib/db.js` + Postgres)** — matches, odds, recommendations, and
+   results. The single source of truth the UI reads from.
+3. **Server layer (route handlers)** — the only place the Odds API key is used. Fetches,
+   validates, transforms provider data, and writes to the database. Two action routes
+   plus a read route.
+4. **Client layer (React components)** — renders the match list, detail breakdowns,
+   closed-match cards, the scorecard, timezone-localized times, flags, lock-soon
+   highlighting, filtering/search, and the standalone calculator. Never sees the API key.
+
+Design priorities, in order: correctness of the model, frugal credit use (on-demand
+only), durable results, and a fast, legible UI.
 
 ### Requirements coverage map
 
 | Req | Addressed by |
 |---|---|
-| 1 Match listing | `MatchList`, `MatchRow`, recommendation pipeline, odds-pending state |
+| 1 Match listing | `MatchList`, `MatchRow`, DB read, odds-pending + closed states |
 | 2 Time/localization | `lib/time.js` (Europe/Madrid), day grouping, relative indicator |
 | 3 Flags & lock-soon | `lib/flags.js`, `lib/lockSoon.js`, `MatchRow` highlight |
-| 4 Odds ingestion | `lib/oddsProvider.js`, route handlers, `lib/bookmaker.js`, cache |
+| 4 Odds ingestion (on-demand) | `lib/oddsProvider.js`, `POST /api/refresh-odds`, `lib/bookmaker.js`, `lib/db.js` |
 | 5 EV computation | `lib/shin.js`, `lib/odds.js`, `lib/poisson.js`, `lib/optimizer.js`, `lib/recommend.js`, `MatchDetail` |
-| 6 Data freshness | route handlers, `lib/cache.js`, `lib/rateLimit.js`, close-match scoping |
-| 7 Filter/search/calc | `MatchList` controls, `/calculator` page |
-| 8 Hosting/stack | App Router route handlers, `lib/` separation, tests |
-| 9 Quota/cost | Caching + credit accounting + rate limiting |
-| 10 Resilience | Cache fallback, per-match degrade, staleness flags |
-| 11 Security | Server-only key, response validation schema |
+| 6 On-demand refresh & persistence | action routes, `lib/db.js`, `lib/rateLimit.js`, empty-DB prompt |
+| 7 Closed matches & scorecard | `lib/scoresProvider.js`, `POST /api/update-results`, `lib/scorecard.js`, `ClosedCard`, `Scorecard` |
+| 8 Filter/search/calc | `MatchList` controls, `/calculator` page |
+| 9 Hosting/stack | App Router routes + Neon (Vercel-managed Postgres), `lib/` separation, tests |
+| 10 Quota/cost | On-demand-only fetching, DB-served reads, rate limiting |
+| 11 Resilience | DB always renders; action failures leave DB unchanged; per-match degrade |
+| 12 Security | Server-only key, response validation schema |
+
+(Requirement numbers follow the updated requirements.md ordering.)
 
 ## Architecture
 
 ```
                             ┌──────────────────────────────────────┐
                             │            Browser (client)           │
-                            │  MatchList · MatchRow · MatchDetail    │
-                            │  Calculator · filters/search           │
+                            │  MatchList · MatchRow · ClosedCard     │
+                            │  Scorecard · Calculator · filters      │
+                            │  [Refresh odds] [Update results]       │
                             └───────────────┬──────────────────────┘
                                             │ fetch (no secrets)
                  ┌──────────────────────────┼───────────────────────────┐
                  │                  Next.js route handlers (server)       │
                  │                                                        │
-                 │  GET  /api/matches            → cached recommendations │
-                 │  POST /api/matches/[id]/refresh → per-event refresh    │
+                 │  GET  /api/matches          → read from Postgres       │
+                 │  POST /api/refresh-odds     → full-list odds fetch      │
+                 │  POST /api/update-results   → scores fetch + freeze     │
                  │                                                        │
-                 │   ┌────────────┐  ┌───────────┐  ┌──────────────────┐  │
-                 │   │oddsProvider│  │   cache   │  │    rateLimit     │  │
-                 │   │ (fetch+val)│  │ (in-mem + │  │ (per-event guard)│  │
-                 │   └─────┬──────┘  │  revalid) │  └──────────────────┘  │
-                 │         │         └───────────┘                        │
-                 │         ▼                                              │
+                 │   ┌────────────┐ ┌─────────────┐ ┌────────────────┐   │
+                 │   │oddsProvider│ │scoresProvider│ │   rateLimit    │   │
+                 │   │ (fetch+val)│ │ (fetch+val)  │ │ (action guard) │   │
+                 │   └─────┬──────┘ └──────┬───────┘ └────────────────┘   │
+                 │         │               │                              │
+                 │         ▼               ▼                              │
                  │   ┌──────────────────────────────────────────────┐    │
-                 │   │ recommend.js  (orchestrates the lib core)      │    │
-                 │   │  bookmaker → shin → odds(solve λ) → poisson    │    │
-                 │   │   → optimizer → breakdown                      │    │
-                 │   └──────────────────────────────────────────────┘    │
+                 │   │ recommend.js / scorecard.js  (lib core)        │    │
+                 │   └──────────────────────┬───────────────────────┘    │
+                 │                          ▼                             │
+                 │                    ┌───────────┐                       │
+                 │                    │ lib/db.js │  → Neon Postgres       │
+                 │                    └───────────┘                       │
                  └───────────────────────────┬────────────────────────────┘
                                              │ HTTPS + apiKey (env)
                                              ▼
-                                   The Odds API (soccer_fifa_world_cup)
+                                   The Odds API (odds + scores endpoints)
+```
+
+Page load path: `GET /api/matches` (or the server component) reads Postgres and renders.
+No provider call. The provider is touched only by the two POST action routes.
 ```
 
 ### Why this shape
 
-- **Route handlers, not a separate service** (Req 8.1): Vercel runs them as serverless
-  functions; no infra to manage, and the key stays server-side (Req 4.2–4.4, 11.1).
-- **Recommendation computed server-side**: the client receives only finished
-  recommendation payloads, keeping bundles small and the model logic centralized.
-- **In-memory cache + Next revalidation**: avoids per-view provider calls and is the
-  primary lever for staying in the free tier (Req 9.1). Note the serverless caveat
-  below.
+- **Read from Postgres, fetch on demand**: page loads are pure DB reads, so they cost
+  zero credits, are instant, and survive serverless cold starts (the old in-memory cache
+  could not). Provider calls happen only on the two explicit action routes.
+- **Postgres, not in-memory cache**: results must persist for the whole tournament and a
+  cold serverless instance must not lose them. Neon (Vercel-managed Postgres) is durable, managed, and
+  on the same platform (no separate host).
+- **Recommendation computed server-side at write time**: when odds are refreshed, the
+  recommendation is computed and stored, so reads are trivial and the model logic stays
+  centralized server-side.
+- **Closed matches are frozen**: once the scores endpoint marks a match completed, its
+  recommendation and final score are immutable, so later odds refreshes never rewrite
+  history.
 
-### Serverless caching caveat
+## Data Persistence (Neon Serverless Postgres)
 
-Vercel serverless instances are ephemeral; module-level in-memory cache is per-instance
-and can cold-start empty. The design uses Next's `unstable_cache` / fetch `revalidate`
-as the durable cache layer (backed by Vercel's Data Cache), with a small module-level
-memo as a fast path within a warm instance. This keeps full-list fetches to ~1–2/day
-regardless of instance churn. No external KV is required for v1; the design leaves a
-seam (`cache.js` interface) to swap in Vercel KV later if needed.
+`lib/db.js` is the only module that talks to Postgres; everything else goes through it.
+
+Schema (single shared dataset, no per-user state):
+
+```sql
+CREATE TABLE matches (
+  event_id        TEXT PRIMARY KEY,
+  home_team       TEXT NOT NULL,
+  away_team       TEXT NOT NULL,
+  commence_time   TIMESTAMPTZ NOT NULL,
+  group_label     TEXT,
+  status          TEXT NOT NULL,         -- 'upcoming' | 'live' | 'closed'
+  -- odds + recommendation (null until first refresh; "odds pending")
+  odds_as_of      TIMESTAMPTZ,
+  bookmaker       TEXT,
+  recommendation  JSONB,                 -- full Recommendation payload
+  -- result (null until match closes)
+  final_home      INT,
+  final_away      INT,
+  completed       BOOLEAN NOT NULL DEFAULT FALSE,
+  earned_points   REAL,                  -- points the stored pick scored
+  updated_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE meta (
+  key             TEXT PRIMARY KEY,      -- 'odds_last_refreshed', 'results_last_updated'
+  value           TIMESTAMPTZ
+);
+```
+
+`lib/db.js` interface:
+
+```js
+export async function getAllMatches();              // ordered by commence_time
+export async function upsertMatchOdds(card);        // skips frozen closed matches for pick/score
+export async function freezeResult(eventId, finalHome, finalAway, earnedPoints);
+export async function getMeta(key);                 // last-refreshed timestamps
+export async function setMeta(key, isoTs);
+export async function isEmpty();                     // → empty-DB prompt (Req 1.8)
+```
+
+`upsertMatchOdds` is closed-aware: for a row with `completed = true` it updates volatile
+fields only and never overwrites `recommendation`, `final_*`, or `earned_points`
+(Req 7.3). Local dev uses the same interface against a local/branch Postgres or a
+`DATABASE_URL` pointing at a Neon (Vercel-managed Postgres) dev database.
 
 ## Components and Interfaces
 
@@ -221,78 +285,111 @@ approach since they have no emoji flag.
 #### `lib/oddsProvider.js` (new) — Req 4.1, 4.5, 4.6, 11.2, 11.3
 
 ```js
-export async function fetchAllOdds();          // full-list fetch
-export async function fetchEventOdds(eventId); // per-event fetch
+export async function fetchAllOdds();          // single full-list fetch (all matches)
 export function normalizeEvent(rawEvent);      // validate + shape; returns null if unusable
 ```
 
-Builds URLs with `regions=eu`, `markets=h2h,totals`, `oddsFormat=decimal`, key from
-`process.env.ODDS_API_KEY`. `normalizeEvent` is the validation boundary (Req 11.2): it
-checks types/shapes, keeps valid fields and drops invalid ones (Req 11.3), and returns
-`null` for an event with no usable market (→ odds pending, Req 10.3).
+Builds the URL with `regions=eu`, `markets=h2h,totals`, `oddsFormat=decimal`, key from
+`process.env.ODDS_API_KEY`. There is intentionally **no** per-event fetch: the full-list
+call costs the same 2 credits and returns every match. `normalizeEvent` is the validation
+boundary (Req 11.2): it checks types/shapes, keeps valid fields and drops invalid ones
+(Req 11.3), and returns `null` for an event with no usable market (→ odds pending).
 
-#### `lib/cache.js` (new) — Req 4.7, 4.8, 6.1, 10.1, 10.2
-
-```js
-export async function getCachedMatches();              // durable cache read
-export async function setCachedMatches(snapshot);      // write full snapshot
-export async function patchCachedMatch(id, entry);     // per-event update (Req 4.8)
-export function isStale(snapshot, maxAgeMs);
-```
-
-Snapshot shape includes `fetchedAt` so the UI can show staleness (Req 6.7, 10.1). On a
-provider failure the route returns the last good snapshot flagged `stale: true`
-(Req 10.1, 10.2).
-
-#### `lib/rateLimit.js` (new) — Req 6.6, 9.1
+#### `lib/scoresProvider.js` (new) — Req 7, 11.2
 
 ```js
-export function allowRefresh(eventId, now);  // → boolean; per-event min interval
+export async function fetchScores(daysFrom = 3);  // scores endpoint
+export function normalizeScore(rawScore);          // → { eventId, completed, home, away } | null
 ```
 
-In-memory token/timestamp guard keyed by event id (e.g. min 5 min between manual
-refreshes of the same match). Best-effort across instances; combined with caching it
-keeps usage well under 500 credits/month.
+Calls `/sports/soccer_fifa_world_cup/scores/?daysFrom=N` (2 credits). Joins to matches by
+`eventId`. `normalizeScore` validates the `completed` flag and parses the `scores` array
+(team-name-keyed, like h2h) into integer goals; returns `null` if not completed or
+malformed.
+
+#### `lib/db.js` (new) — Req 6, 7, 9 (persistence)
+
+Postgres access layer (interface shown in the Data Persistence section). The only module
+that issues SQL. `upsertMatchOdds` is closed-aware (never rewrites frozen results);
+`freezeResult` sets the final score + `earned_points` once.
+
+#### `lib/scorecard.js` (new) — Req 7.4, 7.5
+
+```js
+/** Aggregate earned points and pick-quality counts over closed matches. */
+export function buildScorecard(closedMatches);
+//   → { totalPoints, counts:{exact,close,result,wrong}, played }
+```
+
+Pure function: classifies each closed match's stored pick vs final score via the
+Scoring_Module and tallies the bands (Req 7.5). Unit-testable in isolation.
+
+#### `lib/rateLimit.js` (new) — Req 6.7, 10
+
+```js
+export function allowAction(actionKey, now);  // "refresh-odds" | "update-results"
+```
+
+In-memory timestamp guard keyed by action name (min interval between invocations of each
+action). Best-effort across instances; combined with on-demand-only fetching, usage stays
+far under 500 credits/month.
 
 ### Server layer (route handlers)
 
-#### `GET /api/matches` — Req 1, 6.1–6.3, 10
+#### `GET /api/matches` — Req 1, 6.2, 10, 11
 
 ```
-1. read durable cache; if fresh enough → return it
-2. else Full_List_Fetch → normalizeEvent[] → recommendForMatch[] → snapshot
-3. on provider error → return last cached snapshot with { stale:true, warning }
-4. response: { matches:[RecommendationCard], fetchedAt, stale }
+1. read all matches from Postgres via db.getAllMatches()
+2. build Scorecard from the closed matches
+3. response: { matches:[MatchCard], scorecard, meta:{oddsLastRefreshed, resultsLastUpdated}, empty }
 ```
 
-Auto-refresh scoping (Req 6.2/6.3) is applied here: only Close_Match entries are
-eligible to trigger a fresh fetch; distant matches are served from the daily snapshot.
+Pure DB read, no provider call (Req 6.2). If the DB is empty, `empty:true` drives the
+"run Refresh odds" prompt (Req 1.8).
 
-#### `POST /api/matches/[id]/refresh` — Req 4.5, 4.8, 6.4–6.6
+#### `POST /api/refresh-odds` — Req 4.5–4.9, 6.3
 
 ```
-1. rateLimit.allowRefresh(id) → if blocked, 429 + retryAfter
-2. Per_Event_Fetch(id) → normalize → recommendForMatch
-3. patchCachedMatch(id, entry)  (Req 4.8; background-repair on failure, Req 4.9)
-4. on failure → 502 with { error }, client keeps prior odds (Req 6.5)
-5. response: { match:RecommendationCard }
+1. allowAction("refresh-odds") → if blocked, 429 + retryAfter
+2. fetchAllOdds() → normalizeEvent[] → recommendForMatch[] → buildCard[]
+3. db.upsertMatchOdds(card) for each (closed matches keep frozen pick/score)
+4. db.setMeta("odds_last_refreshed", now)
+5. on provider error → 502 { error }; DB left unchanged (Req 4.9, 11.1)
+6. response: { updated:N, meta }
+```
+
+#### `POST /api/update-results` — Req 7.1–7.3
+
+```
+1. allowAction("update-results") → if blocked, 429 + retryAfter
+2. fetchScores() → normalizeScore[]
+3. for each completed score: compute earnedPoints = points(storedPick, finalScore);
+   db.freezeResult(eventId, home, away, earnedPoints); set status="closed"
+4. db.setMeta("results_last_updated", now)
+5. on provider error → 502 { error }; DB left unchanged
+6. response: { closed:N, meta }
 ```
 
 ### Client layer (React components, App Router)
 
-- `app/page.js` — server component: initial `GET /api/matches`, renders `MatchList`.
+- `app/page.js` — server component: reads `GET /api/matches` (DB), renders `Scorecard`,
+  the action buttons, and `MatchList`. Shows the empty-DB prompt when `empty` (Req 1.8).
+- `components/ActionBar.jsx` — "Refresh odds" and "Update results" buttons (separate),
+  each calling its POST route, showing last-updated times and 429/502 messages.
+- `components/Scorecard.jsx` — tournament totals: earned points + exact/close/result/
+  wrong counts; "no matches scored yet" when empty (Req 7.4–7.6).
 - `components/MatchList.jsx` — day-grouped list (Req 2.3), filter/search controls
-  (Req 7.1, 7.2), sorted by kickoff asc (Req 1.4).
+  (Req 8.1, 8.2), sorted by kickoff asc (Req 1.4).
 - `components/MatchRow.jsx` — teams + flags (Req 1.2, 3.1), kickoff (Req 2.1, 2.2),
-  group/stage (Req 1.3), recommended pick or "Odds Pending" (Req 1.5), odds-as-of +
-  refresh control (Req 4.13, 6.7), lock-soon highlight (Req 3.3, 3.4), relative
-  indicator (Req 2.4). Expands to `MatchDetail`.
+  group/stage (Req 1.3), recommended pick or "Odds Pending" (Req 1.5), odds-as-of
+  (Req 4.13), lock-soon highlight (Req 3.3, 3.4), relative indicator (Req 2.4). Expands to
+  `MatchDetail`. Renders as `ClosedCard` when `status === "closed"`.
+- `components/ClosedCard.jsx` — distinct "Closed" styling: final score, the stored
+  Recommended_Pick, and Earned_Points with a band label (Req 1.9, 7.2).
 - `components/MatchDetail.jsx` — top-N picks table, four-band breakdown, outcome
   probabilities, λ, and the modal-vs-recommended note (Req 5.9–5.13).
-- `components/RefreshButton.jsx` — calls the per-event refresh route; handles 429/502
-  by showing a message and keeping prior data (Req 6.5).
-- `app/calculator/page.js` — retains the existing manual odds/λ tool (Req 7.3),
-  now able to toggle Shin vs proportional.
+- `app/calculator/page.js` — retains the manual odds/λ tool (Req 8.3), with the
+  Shin vs proportional toggle.
 
 ## Data Models
 
@@ -327,23 +424,33 @@ type Recommendation = {
   devigMethod: "shin" | "proportional";
 };
 
-// What a row renders
-type RecommendationCard = {
+// What a row renders (also the persisted match shape, minus SQL columns)
+type MatchCard = {
   eventId: string;
   homeTeam: string; awayTeam: string;
   homeFlag: string; awayFlag: string;
   commenceTimeUtc: string;
   group?: string;
+  status: "upcoming" | "live" | "closed" | "pending"; // pending = no usable odds
   oddsAsOf?: string;             // absent when pending
-  status: "ok" | "pending";      // pending = no usable odds (Req 1.5, 10.3)
+  bookmaker?: string;
   recommendation?: Recommendation; // absent when pending
+  // present only when status === "closed"
+  result?: { home: number; away: number; earnedPoints: number;
+             band: "exact" | "close" | "result" | "wrong" };
+};
+
+type Scorecard = {
+  played: number;                // closed matches
+  totalPoints: number;
+  counts: { exact: number; close: number; result: number; wrong: number };
 };
 
 type MatchesResponse = {
-  matches: RecommendationCard[];
-  fetchedAt: string;
-  stale: boolean;                // Req 10.1
-  warning?: string;
+  matches: MatchCard[];
+  scorecard: Scorecard;
+  meta: { oddsLastRefreshed?: string; resultsLastUpdated?: string };
+  empty: boolean;                // true when DB has no matches yet (Req 1.8)
 };
 ```
 
@@ -351,18 +458,20 @@ type MatchesResponse = {
 
 | Scenario | Handling | Req |
 |---|---|---|
-| Provider unreachable / 5xx on full list | Return last cached snapshot, `stale:true`, warning banner | 10.1, 10.2 |
-| No cache yet AND provider down | Return `matches:[]`, `stale:true`, explanatory warning | 10.1 |
-| Single event malformed/partial | `normalizeEvent` drops invalid fields; if no usable market → `status:"pending"`, rest of list unaffected | 10.3, 11.3 |
+| Provider unreachable / 5xx during refresh-odds | 502 to client; DB left unchanged; existing data still served | 10.1, 11 |
+| Provider unreachable / 5xx during update-results | 502 to client; DB left unchanged | 10.1 |
+| Page load with provider down | Unaffected — reads DB only, no provider call | 10.2 |
+| Single event malformed/partial | `normalizeEvent` drops invalid fields; no usable market → `status:"pending"`, rest unaffected | 10.3, 11.3 |
 | No usable bookmaker | `selectBookmaker` → null → `status:"pending"` | 1.5, 4.12 |
 | Shin non-convergence | `devigBest` falls back to proportional, sets `devigMethod` | 5.2 |
-| Per-event refresh provider error | 502 to client; client keeps prior odds + timestamp, shows message | 6.5 |
-| Cache write fails after good fetch | Use fresh data now, background-repair cache | 4.9 |
-| Manual refresh too frequent | 429 + `retryAfter`; client shows cooldown | 6.6 |
-| Missing `ODDS_API_KEY` env | Route returns 500 with clear server log; never leaks key | 4.2, 11.1 |
+| Refresh would overwrite a closed match | `upsertMatchOdds` skips frozen pick/score/result | 7.3 |
+| Action invoked too soon | 429 + `retryAfter`; client shows cooldown | 6.7 |
+| Empty database | `GET /api/matches` returns `empty:true` → UI prompts "Refresh odds" | 1.8 |
+| Missing `ODDS_API_KEY` env | Action route returns 500; never leaks key | 4.2, 11.1 |
+| Missing `DATABASE_URL` env | App fails fast on startup with a clear server log | 9.1 |
 
-All provider responses pass through `normalizeEvent` before any modeling code touches
-them (Req 11.2). Modeling functions assume already-validated numeric input.
+All provider responses pass through `normalizeEvent` / `normalizeScore` before any
+modeling code touches them (Req 11.2). Modeling functions assume validated numeric input.
 
 ## Testing Strategy
 
@@ -383,40 +492,52 @@ Unit tests (Node `node --test`, existing harness) for the `lib/` core (Req 8.4):
   preceding midnight; not-yet / already-live edges (injected `now`).
 - **oddsProvider.normalizeEvent** — valid event; partial event (drop invalid fields);
   unusable event → null; URL/param construction with a stubbed key.
+- **scoresProvider.normalizeScore** — completed event with score → parsed integers;
+  not-completed → null; malformed scores array → null.
+- **scorecard.buildScorecard** — tallies exact/close/result/wrong counts and total
+  points across closed-match fixtures; empty input → zeros.
 
-Route handlers and components are validated manually plus light integration tests where
-practical (fetch mocked); the heavy logic lives in the unit-tested core by design.
+The `lib/db.js` layer is integration-tested against a disposable Postgres (or skipped
+when `DATABASE_URL` is absent), since it is thin SQL over the unit-tested core. Route
+handlers and components get light integration/render tests with `fetch`/db mocked; the
+heavy logic lives in the unit-tested core by design.
 
 A `node --test` run plus `next build` is the verification gate before each task is
 considered done.
 
 ## Design Decisions and Trade-offs
 
-- **No database (v1).** Nothing the app stores is irreplaceable: there are no accounts,
-  no saved picks, and no history (all v1 non-goals). The only persisted data is the odds
-  cache, which is derived and re-fetchable, so it lives in the Next.js Data Cache rather
-  than a database. Persistence is isolated behind `cache.js`, so Vercel KV/Postgres can
-  be added later if the pool-aware strategy or history tracking is introduced. The whole
-  app runs on GitHub + Vercel with no external service.
+- **Neon (Vercel-managed Postgres) for persistence.** Results must survive the whole tournament and
+  serverless cold starts, so an in-memory cache is insufficient. Postgres is durable,
+  managed, on-platform (no separate host), and gives a clean path to a season scoreboard.
+  All SQL is isolated in `lib/db.js`. Trade-off: one managed dependency and a `DATABASE_URL`
+  env var, accepted because the closed-match/scorecard feature needs real persistence.
+- **On-demand fetching only.** The provider is called solely on the two action buttons,
+  never on page load. This makes credit usage deterministic and tiny (a handful of
+  2-credit calls when the user chooses), eliminates the cold-start "first visitor pays"
+  problem, and makes loads instant. Trade-off: data is only as fresh as the last manual
+  refresh — acceptable and in fact desired here (the user refreshes right before locking).
+- **Single full-list odds fetch, no per-event endpoint.** The Odds API prices per call as
+  regions × markets (2 credits) regardless of match count, so one full-list call is
+  strictly better than looping per-event calls. The per-event endpoint was removed.
+- **Closed matches are frozen.** Once results are recorded, the stored recommendation and
+  final score are immutable so later refreshes can't rewrite what the app "picked." This
+  is what makes the scorecard trustworthy.
 - **Emoji flags (v1).** Zero setup and no assets; accepted trade-off is inconsistent
   rendering on Windows. `flagFor` returns a country code too, so a later switch to
   `flag-icons` SVG is render-only.
-- **Compute recommendations server-side, cache the result** rather than shipping the
-  model to the client. Keeps the bundle small, centralizes validation, and means the
-  expensive λ grid-search runs once per snapshot, not per viewer. Trade-off: a cold
-  serverless instance recomputes from cache miss; acceptable at this scale.
-- **Durable cache via Next Data Cache, not external KV** for v1. Simpler, free, good
-  enough given 1–2 full fetches/day. `cache.js` interface isolates this so KV can be
-  dropped in later without touching routes.
+- **Compute recommendations server-side at write time** rather than shipping the model to
+  the client or recomputing per read. The λ grid-search runs once per refresh and the
+  result is stored; reads are trivial DB fetches.
 - **Shin default, proportional fallback** (per resolved decision) — Shin better handles
   heavy favorites common in World Cup group play; proportional guarantees a result when
   Shin's solver degenerates.
 - **λ via grid search** rather than closed-form inversion. Robust and fast enough
-  (~hundreds of grid evals per match, once per snapshot). Trade-off: not the absolute
-  fastest, but simplicity wins here.
+  (~hundreds of grid evals per match, once per refresh). Simplicity wins here.
 - **Static flag map** over a flag CDN/API (Req 3.2) — zero latency, no extra requests,
   works offline; cost is maintaining a 48-team lookup.
 - **In-memory rate limit** is best-effort across serverless instances. Combined with
-  caching it is sufficient for free-tier protection; a shared store would be the upgrade
-  path if abuse ever mattered (it does not for a personal tool).
+  on-demand-only fetching it is more than sufficient for free-tier protection; a Postgres-
+  or KV-backed guard is the upgrade path if it ever mattered (it does not for a personal
+  tool).
 ```

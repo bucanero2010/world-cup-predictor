@@ -3,10 +3,12 @@
 ## Introduction
 
 World Cup Predictor is a Next.js application deployed on Vercel that lists every 2026
-World Cup match, ingests live betting odds, and recommends the scoreline to pick in a
-Superbru pool to maximize expected points. The application has no separate backend:
-all server-side work runs in Next.js route handlers, and all modeling logic lives in
-framework-agnostic `lib/` modules (`scoring`, `poisson`, `odds`, `optimizer`).
+World Cup match, ingests live betting odds on demand, and recommends the scoreline to
+pick in a Superbru pool to maximize expected points. Server-side work runs in Next.js
+route handlers; all modeling logic lives in framework-agnostic `lib/` modules
+(`scoring`, `poisson`, `odds`, `optimizer`). Match, odds, recommendation, and result
+data are persisted in a Vercel-hosted Postgres database so the app reads from the
+database on every page load and only calls the odds provider on explicit user action.
 
 The primary user is based in Madrid (Europe/Madrid timezone) and refreshes
 recommendations before locking picks so they can react to odds movement as more money
@@ -14,18 +16,25 @@ enters the market closer to kickoff. The Superbru scoring model is fixed: Exact 
 Close = 1.5, Result = 1, Wrong = 0. Penalty shootouts score as the post-regulation /
 extra-time result (a shootout is scored as a draw).
 
-This document formalizes the resolved requirements draft. All previously settled
-decisions (odds provider configuration, bookmaker policy, de-vig method, refresh
-cadence, and the "lock soon" highlight window) are reflected here as committed
-requirements and are not reopened.
+Finalized matches are retained as "Closed" with their final score, the recommendation
+the app had made, and the Superbru points that recommendation would have earned. A
+tournament scorecard aggregates those points across all closed matches.
+
+This document formalizes the resolved requirements. Settled decisions (odds provider
+configuration, bookmaker policy, de-vig method, the "lock soon" highlight window,
+on-demand fetching, Postgres persistence, single full-list fetch, and closed-match
+result tracking) are committed requirements and are not reopened.
 
 ## Glossary
 
 - **App**: The World Cup Predictor application as a whole (Next.js frontend + route handlers).
 - **Match_List**: The component responsible for listing and ordering matches.
 - **Match_Row**: A single match entry within the Match_List.
-- **Odds_Service**: The server-side route handler logic that fetches, caches, and validates odds.
+- **Database**: The Vercel-hosted Postgres store persisting matches, odds, recommendations, and results.
+- **Odds_Service**: The server-side route handler logic that fetches and validates odds and persists them to the Database.
+- **Results_Service**: The server-side route handler logic that fetches final scores and freezes closed-match results in the Database.
 - **Odds_Provider**: The external odds source. Default: The Odds API, endpoint `soccer_fifa_world_cup`, `regions=eu`, `markets=h2h,totals`, decimal format (2 credits per call).
+- **Scores_Endpoint**: The Odds API `scores` endpoint returning `completed` and final `scores` per event (2 credits per call), joined to matches by event id.
 - **Devig_Module**: The `lib/odds` logic that removes bookmaker margin to produce fair probabilities.
 - **Lambda_Solver**: The `lib/odds` logic that solves expected goals (λ per side) from de-vigged probabilities and the total-goals line.
 - **Score_Model**: The `lib/poisson` Dixon-Coles adjusted Poisson scoreline grid builder.
@@ -36,9 +45,13 @@ requirements and are not reopened.
 - **Shin_Method**: Shin's de-vig method, which models the margin as driven by favorite-longshot bias. Default de-vig method.
 - **Proportional_Method**: The simple proportional de-vig method (normalize implied probabilities), retained as a fallback.
 - **EV**: Expected Superbru points for a candidate pick over the full scoreline distribution.
-- **Full_List_Fetch**: A low-frequency fetch of all matches via `/sports/soccer_fifa_world_cup/odds`.
-- **Per_Event_Fetch**: An on-demand fetch of a single match via `/sports/soccer_fifa_world_cup/events/{id}/odds`.
-- **Close_Match**: A match kicking off within approximately 24 hours of the current time.
+- **Full_List_Fetch**: A single fetch of all matches via `/sports/soccer_fifa_world_cup/odds` (2 credits, returns every match).
+- **Refresh_Odds_Action**: The explicit, user-triggered action that performs a Full_List_Fetch and upserts results into the Database.
+- **Update_Results_Action**: The explicit, user-triggered action that queries the Scores_Endpoint and freezes closed-match results in the Database.
+- **Match_State**: One of `upcoming`, `live`, or `closed` (derived from kickoff time and the Scores_Endpoint `completed` flag).
+- **Closed_Match**: A match the Scores_Endpoint reports as completed; its final score, recommendation, and earned points are frozen in the Database.
+- **Earned_Points**: The Superbru points the Recommended_Pick would have scored against a Closed_Match's final score, via the Scoring_Module.
+- **Scorecard**: The aggregate of Earned_Points (and pick-quality counts) across all Closed_Match entries.
 - **Lock_Soon**: A highlight state indicating a match is approaching its pick lock.
 - **Odds_As_Of**: The timestamp of the odds used to compute a match's recommendation.
 - **Madrid_Time**: Local time in the Europe/Madrid timezone, with automatic CET/CEST handling.
@@ -58,6 +71,9 @@ requirements and are not reopened.
 4. THE Match_List SHALL sort matches by kickoff time in ascending order by default.
 5. IF a match has no posted odds, THEN THE Match_Row SHALL display all standard elements (team names, flags, kickoff date and time) with an "Odds Pending" placeholder shown where the Recommended_Pick would appear.
 6. WHILE a match has no newly posted odds, THE Match_Row SHALL retain any previously displayed Recommended_Pick until new odds arrive.
+7. THE Match_List SHALL read all displayed data from the Database, performing no Odds_Provider calls on page load.
+8. WHERE the Database is empty, THE App SHALL display a prompt to run the Refresh_Odds_Action rather than fetching automatically.
+9. WHERE a match is a Closed_Match, THE Match_Row SHALL render in a visually distinct "Closed" style showing the final score, the Recommended_Pick, and the Earned_Points.
 
 ### Requirement 2: Time and Localization
 
@@ -83,7 +99,7 @@ requirements and are not reopened.
 
 ### Requirement 4: Odds Ingestion
 
-**User Story:** As the operator of the app, I want odds fetched securely on the server using a controlled strategy, so that recommendations stay populated without exposing my API key or exhausting my quota.
+**User Story:** As the operator of the app, I want odds fetched securely on the server only when I ask, so that recommendations are controlled, my API key is never exposed, and I do not exhaust my quota.
 
 #### Acceptance Criteria
 
@@ -91,11 +107,11 @@ requirements and are not reopened.
 2. THE Odds_Service SHALL read the Odds_Provider API key from a server-side environment variable only.
 3. THE App SHALL NOT include the Odds_Provider API key in any client bundle.
 4. THE Odds_Service SHALL perform all odds fetching within a server-side route handler.
-5. THE Odds_Service SHALL support a Full_List_Fetch via `/sports/soccer_fifa_world_cup/odds` to populate the schedule and all recommendations.
-6. THE Odds_Service SHALL support a Per_Event_Fetch via `/sports/soccer_fifa_world_cup/events/{id}/odds` for single-match refresh.
-7. THE Odds_Service SHALL cache Full_List_Fetch responses server-side.
-8. WHEN a Per_Event_Fetch completes, THE Odds_Service SHALL update only that match's cached entry.
-9. IF a Per_Event_Fetch completes successfully but the cache update fails, THEN THE Odds_Service SHALL use the freshly fetched odds immediately and attempt to repair the cache entry in the background.
+5. THE Odds_Service SHALL retrieve all matches via a single Full_List_Fetch and SHALL NOT use any per-event odds endpoint.
+6. THE Odds_Service SHALL fetch odds ONLY in response to the Refresh_Odds_Action, never automatically on page load or data expiry.
+7. WHEN a Refresh_Odds_Action completes, THE Odds_Service SHALL upsert each match's fixture, odds, and recomputed recommendation into the Database.
+8. THE Refresh_Odds_Action SHALL be rate-limited to protect the Odds_Provider free-tier quota.
+9. IF a Refresh_Odds_Action fails due to a provider error or network issue, THEN THE App SHALL display an error and leave the existing Database contents unchanged.
 10. WHEN computing a match's recommendation, THE Odds_Service SHALL use the Sharp_Book odds as the primary input.
 11. IF the Sharp_Book is absent for a match, THEN THE Odds_Service SHALL average the odds across the available bookmakers.
 12. IF the Sharp_Book is absent and averaging across bookmakers is not possible, THEN THE Odds_Service SHALL use the first available bookmaker's odds.
@@ -121,19 +137,32 @@ requirements and are not reopened.
 12. WHEN a user expands a match's detail view, THE App SHALL display the solved λ for each side.
 13. WHERE the Recommended_Pick differs from the single most likely scoreline, THE App SHALL make that difference legible in the detail view.
 
-### Requirement 6: Data Freshness and Live Refresh Behavior
+### Requirement 6: On-Demand Refresh and Persistence
 
-**User Story:** As a user, I want fresh odds concentrated on imminent matches and clear staleness signals, so that my picks reflect the latest market while staying within the free-tier quota.
+**User Story:** As a user, I want data to load instantly from storage and update only when I choose, so that the app is fast, predictable, and frugal with API credits.
 
 #### Acceptance Criteria
 
-1. THE Odds_Service SHALL maintain a baseline fixture and odds snapshot via a Full_List_Fetch performed approximately one to two times per day.
-2. THE Odds_Service SHALL scope automatic odds refresh to Close_Match matches only.
-3. THE Odds_Service SHALL NOT auto-refresh matches that are not Close_Match matches.
-4. WHEN a user requests a manual refresh of a single match, THE Odds_Service SHALL fetch that match's odds using a Per_Event_Fetch.
-5. IF a manual Per_Event_Fetch fails due to a provider error or network issue, THEN THE App SHALL display an error message and retain the match's previous odds with their original Odds_As_Of timestamp.
-6. THE Odds_Service SHALL rate-limit per-match manual refresh requests to protect the Odds_Provider free-tier quota.
-7. THE Match_Row SHALL display when its odds data was last updated and whether a refresh is available.
+1. THE App SHALL persist matches, odds, recommendations, and results in the Database.
+2. THE App SHALL read all match data from the Database on page load and SHALL NOT call the Odds_Provider automatically.
+3. THE App SHALL provide a Refresh_Odds_Action control that, when invoked, performs a Full_List_Fetch and upserts the results into the Database.
+4. THE App SHALL provide an Update_Results_Action control, separate from Refresh_Odds_Action, that, when invoked, queries the Scores_Endpoint and updates match results in the Database.
+5. WHEN a refresh or results action updates a non-closed match, THE App SHALL overwrite that match's stored odds, recommendation, or result.
+6. THE App SHALL display when the Database was last updated by each action.
+7. THE App SHALL rate-limit the Refresh_Odds_Action and Update_Results_Action to protect the Odds_Provider free-tier quota.
+
+### Requirement 7: Closed Matches and Scorecard
+
+**User Story:** As a Superbru player, I want finished matches kept with their final score and how my recommended pick scored, so that I can track how well the app's picks performed over the tournament.
+
+#### Acceptance Criteria
+
+1. WHEN the Update_Results_Action reports a match as completed, THE Results_Service SHALL set that match's Match_State to `closed` and store its final score in the Database.
+2. WHEN a match becomes a Closed_Match, THE Results_Service SHALL compute Earned_Points by scoring the stored Recommended_Pick against the final score using the Scoring_Module, and persist it.
+3. ONCE a match is a Closed_Match, THE App SHALL NOT overwrite its stored Recommended_Pick or final score on subsequent Refresh_Odds_Action invocations.
+4. THE App SHALL display a Scorecard aggregating Earned_Points across all Closed_Match entries.
+5. THE Scorecard SHALL display the count of exact, close, result, and wrong outcomes across all Closed_Match entries.
+6. WHERE no Closed_Match entries exist, THE Scorecard SHALL indicate that no matches have been scored yet.
 
 ### Requirement 7: Filtering, Search, and Standalone Calculator
 
@@ -151,9 +180,9 @@ requirements and are not reopened.
 
 #### Acceptance Criteria
 
-1. THE App SHALL deploy on Vercel using Next.js route handlers with no separate backend service.
+1. THE App SHALL deploy on Vercel using Next.js route handlers and a Vercel-hosted Postgres database, with no separate self-managed backend service.
 2. THE App SHALL keep all modeling logic in the framework-agnostic `lib/` modules (`scoring`, `poisson`, `odds`, `optimizer`).
-3. WHERE non-modeling functionality such as authentication or analytics is required, THE App SHALL be permitted to use external services while keeping modeling logic in the `lib/` modules.
+3. WHERE non-modeling functionality such as persistence, authentication, or analytics is required, THE App SHALL be permitted to use external/managed services (including the Database) while keeping modeling logic in the `lib/` modules.
 4. THE App SHALL provide unit tests for the `lib/` modeling modules.
 
 ### Requirement 9: Quota and Cost
@@ -162,7 +191,8 @@ requirements and are not reopened.
 
 #### Acceptance Criteria
 
-1. THE App SHALL operate within the Odds_Provider free-tier credit allowance under normal use through server-side caching and manual-refresh rate limiting.
+1. THE App SHALL operate within the Odds_Provider free-tier credit allowance under normal use by fetching only on the explicit Refresh_Odds_Action and Update_Results_Action and rate-limiting both.
+2. THE App SHALL serve page loads from the Database with zero Odds_Provider calls.
 
 ### Requirement 10: Resilience
 
@@ -170,8 +200,8 @@ requirements and are not reopened.
 
 #### Acceptance Criteria
 
-1. IF the Odds_Provider is unreachable or returns an error, THEN THE App SHALL display the last successfully cached data with a staleness warning, including the case where the provider is both unreachable and returns an error.
-2. WHILE the Odds_Provider is unreachable, THE App SHALL fall back to the last successfully cached data rather than degrading individual matches to "odds pending".
+1. IF the Odds_Provider is unreachable or returns an error during a refresh or results action, THEN THE App SHALL display an error and continue serving the existing Database contents unchanged.
+2. THE App SHALL render the persisted Match_List from the Database regardless of Odds_Provider availability.
 3. IF a single match's odds are malformed or partial while the Odds_Provider is otherwise reachable, THEN THE App SHALL degrade that match to the "odds pending" state and continue rendering the rest of the Match_List.
 
 ### Requirement 11: Security and Input Validation
@@ -191,5 +221,7 @@ The following are explicitly out of scope for the first version:
 - Pool-aware or game-theoretic variance strategy (adjusting picks based on standing
   versus other players). Captured as a future enhancement; v1 maximizes per-match EV.
 - Automatically submitting picks to Superbru (no Superbru integration or login).
-- Historical accuracy tracking or backtesting.
-- Accounts, multi-user support, or saved pick state.
+- Automatic/scheduled odds or results refresh (e.g. cron). All fetching is on-demand
+  in v1.
+- Accounts or multi-user support. The Database stores a single shared dataset, not
+  per-user pick state.

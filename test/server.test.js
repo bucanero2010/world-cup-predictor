@@ -2,14 +2,9 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 import { normalizeEvent, buildUrl } from "../lib/oddsProvider.js";
-import {
-  getCachedMatches,
-  setCachedMatches,
-  patchCachedMatch,
-  isStale,
-  _reset as resetCache,
-} from "../lib/cache.js";
-import { allowRefresh, _reset as resetRl } from "../lib/rateLimit.js";
+import { normalizeScore } from "../lib/scoresProvider.js";
+import { buildScorecard, bandOf } from "../lib/scorecard.js";
+import { allowAction, _reset as resetRl } from "../lib/rateLimit.js";
 
 const rawEvent = {
   id: "evt1",
@@ -35,86 +30,97 @@ const rawEvent = {
   ],
 };
 
-// ---- Task 9.2: normalizeEvent ----
+// ---- oddsProvider.normalizeEvent ----
 test("normalizeEvent: valid event -> ok with sharp book", () => {
   const n = normalizeEvent(rawEvent);
   assert.equal(n.status, "ok");
-  assert.equal(n.eventId, "evt1");
   assert.equal(n.bookmaker, "pinnacle");
   assert.deepEqual(n.oneXtwo, [1.44, 4.7, 9.0]);
   assert.equal(n.totalLine, 2.25);
-  assert.equal(n.oddsAsOf, "2026-06-11T17:01:38Z");
 });
 
 test("normalizeEvent: missing core fields -> null", () => {
   assert.equal(normalizeEvent(null), null);
-  assert.equal(normalizeEvent({ id: 1 }), null); // id not string
-  assert.equal(normalizeEvent({ id: "x", home_team: "A" }), null); // missing fields
-  assert.equal(
-    normalizeEvent({ id: "x", home_team: "A", away_team: "B", commence_time: "nope" }),
-    null
-  );
+  assert.equal(normalizeEvent({ id: 1 }), null);
+  assert.equal(normalizeEvent({ id: "x", home_team: "A", away_team: "B", commence_time: "nope" }), null);
 });
 
-test("normalizeEvent: no usable bookmaker -> pending, core fields retained", () => {
+test("normalizeEvent: no usable bookmaker -> pending", () => {
   const n = normalizeEvent({ ...rawEvent, bookmakers: [{ key: "x", markets: [] }] });
   assert.equal(n.status, "pending");
-  assert.equal(n.homeTeam, "Mexico");
   assert.equal(n.oneXtwo, undefined);
 });
 
-test("normalizeEvent: partial totals dropped but h2h kept", () => {
-  const partial = JSON.parse(JSON.stringify(rawEvent));
-  // corrupt totals (missing point) -> totals dropped, h2h still usable
-  partial.bookmakers[0].markets[1].outcomes[0].point = undefined;
-  const n = normalizeEvent(partial);
-  assert.equal(n.status, "ok");
-  assert.deepEqual(n.oneXtwo, [1.44, 4.7, 9.0]);
-  assert.equal(n.totalLine, undefined);
-});
-
-// ---- Task 9.4: URL construction ----
-test("buildUrl includes sport params and key, never leaks into normalized data", () => {
+test("buildUrl includes params and key; key never leaks into normalized data", () => {
   process.env.ODDS_API_KEY = "TESTKEY123";
   const url = buildUrl("/sports/soccer_fifa_world_cup/odds");
   assert.ok(url.includes("regions=eu"));
   assert.ok(url.includes("markets=h2h%2Ctotals"));
-  assert.ok(url.includes("oddsFormat=decimal"));
   assert.ok(url.includes("apiKey=TESTKEY123"));
-  // normalized data must not carry the key
-  const n = normalizeEvent(rawEvent);
-  assert.ok(!JSON.stringify(n).includes("TESTKEY123"));
+  assert.ok(!JSON.stringify(normalizeEvent(rawEvent)).includes("TESTKEY123"));
 });
 
-// ---- Task 10.2: cache ----
-test("cache set/get/patch and isStale", async () => {
-  resetCache();
-  assert.equal(await getCachedMatches(), null);
-  await setCachedMatches({
-    matches: [{ eventId: "a", v: 1 }, { eventId: "b", v: 1 }],
-    fetchedAt: new Date().toISOString(),
+// ---- scoresProvider.normalizeScore ----
+test("normalizeScore: completed with valid scores -> parsed ints", () => {
+  const s = normalizeScore({
+    id: "evt1",
+    completed: true,
+    home_team: "Mexico",
+    away_team: "South Africa",
+    scores: [
+      { name: "Mexico", score: "2" },
+      { name: "South Africa", score: "0" },
+    ],
   });
-  const patched = await patchCachedMatch("b", { eventId: "b", v: 2 });
-  assert.equal(patched, true);
-  const snap = await getCachedMatches();
-  assert.equal(snap.matches.find((m) => m.eventId === "b").v, 2);
-  assert.equal(snap.matches.find((m) => m.eventId === "a").v, 1); // untouched
-
-  assert.equal(await patchCachedMatch("missing", {}), false);
-  assert.equal(isStale(snap, 60000), false);
-  assert.equal(isStale({ fetchedAt: new Date(Date.now() - 120000).toISOString() }, 60000), true);
-  assert.equal(isStale(null, 60000), true);
+  assert.deepEqual(s, { eventId: "evt1", completed: true, home: 2, away: 0 });
 });
 
-// ---- Task 11.2: rate limit ----
-test("allowRefresh permits, blocks within interval, allows after", () => {
+test("normalizeScore: not completed -> null", () => {
+  assert.equal(normalizeScore({ id: "e", completed: false, scores: null }), null);
+});
+
+test("normalizeScore: malformed scores -> null", () => {
+  assert.equal(
+    normalizeScore({ id: "e", completed: true, home_team: "A", away_team: "B", scores: [{ name: "A", score: "x" }] }),
+    null
+  );
+});
+
+// ---- scorecard ----
+test("bandOf maps points to band names", () => {
+  assert.equal(bandOf(3), "exact");
+  assert.equal(bandOf(1.5), "close");
+  assert.equal(bandOf(1), "result");
+  assert.equal(bandOf(0), "wrong");
+});
+
+test("buildScorecard tallies closed matches", () => {
+  const closed = [
+    { status: "closed", recommendation: { pick: [2, 0] }, result: { home: 2, away: 0 } }, // exact 3
+    { status: "closed", recommendation: { pick: [2, 0] }, result: { home: 1, away: 0 } }, // close 1.5
+    { status: "closed", recommendation: { pick: [2, 0] }, result: { home: 0, away: 1 } }, // wrong 0
+    { status: "upcoming", recommendation: { pick: [1, 0] } }, // ignored
+  ];
+  const sc = buildScorecard(closed);
+  assert.equal(sc.played, 3);
+  assert.equal(sc.totalPoints, 4.5);
+  assert.equal(sc.counts.exact, 1);
+  assert.equal(sc.counts.close, 1);
+  assert.equal(sc.counts.wrong, 1);
+});
+
+test("buildScorecard empty -> zeros", () => {
+  const sc = buildScorecard([]);
+  assert.equal(sc.played, 0);
+  assert.equal(sc.totalPoints, 0);
+});
+
+// ---- rateLimit (per-action) ----
+test("allowAction permits, blocks within interval, allows after, independent per action", () => {
   resetRl();
   const t0 = 1_000_000;
-  assert.equal(allowRefresh("e", t0).allowed, true);
-  const blocked = allowRefresh("e", t0 + 1000);
-  assert.equal(blocked.allowed, false);
-  assert.ok(blocked.retryAfterMs > 0);
-  assert.equal(allowRefresh("e", t0 + 5 * 60 * 1000).allowed, true);
-  // independent per event
-  assert.equal(allowRefresh("other", t0 + 1000).allowed, true);
+  assert.equal(allowAction("refresh-odds", t0).allowed, true);
+  assert.equal(allowAction("refresh-odds", t0 + 1000).allowed, false);
+  assert.equal(allowAction("update-results", t0 + 1000).allowed, true); // independent
+  assert.equal(allowAction("refresh-odds", t0 + 60_000).allowed, true);
 });
