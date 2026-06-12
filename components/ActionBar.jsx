@@ -21,8 +21,14 @@ export default function ActionBar({ meta }) {
       const res = await fetch(path, { method: "POST" });
       const data = await res.json();
       if (res.ok) {
-        const n = kind === "odds" ? data.updated : data.closed;
-        setMsg(`${kind === "odds" ? "Odds refreshed" : "Results updated"} (${n}).`);
+        if (kind === "odds") {
+          setMsg(`Odds refreshed (${data.updated}).`);
+        } else {
+          const skipped = data.skipped
+            ? `, ${data.skipped} skipped (finished before first odds refresh)`
+            : "";
+          setMsg(`Results updated (${data.closed}${skipped}).`);
+        }
         router.refresh(); // re-fetch the server component's DB data
       } else if (res.status === 429) {
         setMsg(`Try again in ${Math.ceil((data.retryAfterMs ?? 0) / 1000)}s`);

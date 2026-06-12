@@ -36,11 +36,17 @@ export async function POST() {
     const byId = new Map(stored.map((m) => [m.eventId, m]));
 
     let closed = 0;
+    let skipped = 0;
     for (const s of scores) {
       const match = byId.get(s.eventId);
-      // Earned points require a stored recommendation; if absent (odds never fetched),
-      // freeze the result with null points rather than guessing.
-      const earned = match?.recommendation
+      // We can only score a match we previously stored (i.e. captured its odds while
+      // it was still upcoming). A match that finished before the first odds refresh
+      // is not in the DB and cannot be scored — skip it rather than faking success.
+      if (!match) {
+        skipped += 1;
+        continue;
+      }
+      const earned = match.recommendation
         ? points(match.recommendation.pick, [s.home, s.away])
         : null;
       await freezeResult(s.eventId, s.home, s.away, earned);
@@ -48,7 +54,7 @@ export async function POST() {
     }
     const ts = new Date().toISOString();
     await setMeta("results_last_updated", ts);
-    return NextResponse.json({ closed, resultsLastUpdated: ts });
+    return NextResponse.json({ closed, skipped, resultsLastUpdated: ts });
   } catch {
     return NextResponse.json({ error: "Failed to store results." }, { status: 500 });
   }
