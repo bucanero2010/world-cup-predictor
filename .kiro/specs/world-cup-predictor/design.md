@@ -282,6 +282,19 @@ later is a render-layer change only — no model or data-shape impact. Sub-natio
 (England/Scotland/Wales) will fall back to a neutral placeholder under the emoji
 approach since they have no emoji flag.
 
+#### `lib/providerFetch.js` (new) — Req 4.2, 10, 11.1
+
+```js
+export function apiKeys();                       // [primary, backup?] from env
+export async function fetchWithFailover(buildUrlForKey);
+```
+
+Centralizes key management and automatic failover for both providers. Reads
+`ODDS_API_KEY` (primary) and optional `ODDS_API_KEY_BACKUP`. On an HTTP 401/429
+(quota/auth) failure with one key, it retries with the next key; any other error
+(network, 5xx, malformed) is surfaced immediately without consuming the backup. Keys
+are server-only and never appear in responses.
+
 #### `lib/oddsProvider.js` (new) — Req 4.1, 4.5, 4.6, 11.2, 11.3
 
 ```js

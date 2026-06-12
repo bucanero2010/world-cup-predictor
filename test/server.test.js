@@ -5,6 +5,7 @@ import { normalizeEvent, buildUrl } from "../lib/oddsProvider.js";
 import { normalizeScore } from "../lib/scoresProvider.js";
 import { buildScorecard, bandOf } from "../lib/scorecard.js";
 import { allowAction, _reset as resetRl } from "../lib/rateLimit.js";
+import { fetchWithFailover, apiKeys } from "../lib/providerFetch.js";
 
 const rawEvent = {
   id: "evt1",
@@ -115,7 +116,63 @@ test("buildScorecard empty -> zeros", () => {
   assert.equal(sc.totalPoints, 0);
 });
 
-// ---- rateLimit (per-action) ----
+// ---- provider key failover ----
+test("apiKeys returns primary then backup", () => {
+  process.env.ODDS_API_KEY = "PRIMARY";
+  process.env.ODDS_API_KEY_BACKUP = "BACKUP";
+  assert.deepEqual(apiKeys(), ["PRIMARY", "BACKUP"]);
+});
+
+test("fetchWithFailover retries backup on 429, succeeds", async () => {
+  process.env.ODDS_API_KEY = "PRIMARY";
+  process.env.ODDS_API_KEY_BACKUP = "BACKUP";
+  const orig = global.fetch;
+  const seen = [];
+  global.fetch = async (url) => {
+    seen.push(url);
+    if (url.includes("PRIMARY")) {
+      return { ok: false, status: 429, json: async () => ({}) };
+    }
+    return { ok: true, status: 200, json: async () => ({ ok: true }) };
+  };
+  try {
+    const data = await fetchWithFailover((key) => `https://x/?apiKey=${key}`);
+    assert.deepEqual(data, { ok: true });
+    assert.equal(seen.length, 2); // primary failed, backup used
+    assert.ok(seen[1].includes("BACKUP"));
+  } finally {
+    global.fetch = orig;
+  }
+});
+
+test("fetchWithFailover does NOT failover on a 500 (non-quota) error", async () => {
+  process.env.ODDS_API_KEY = "PRIMARY";
+  process.env.ODDS_API_KEY_BACKUP = "BACKUP";
+  const orig = global.fetch;
+  let calls = 0;
+  global.fetch = async () => {
+    calls += 1;
+    return { ok: false, status: 500, json: async () => ({}) };
+  };
+  try {
+    await assert.rejects(() => fetchWithFailover((key) => `https://x/?apiKey=${key}`));
+    assert.equal(calls, 1); // 500 is not a failover trigger; backup untouched
+  } finally {
+    global.fetch = orig;
+  }
+});
+
+test("fetchWithFailover throws last error when all keys exhausted (429)", async () => {
+  process.env.ODDS_API_KEY = "PRIMARY";
+  process.env.ODDS_API_KEY_BACKUP = "BACKUP";
+  const orig = global.fetch;
+  global.fetch = async () => ({ ok: false, status: 429, json: async () => ({}) });
+  try {
+    await assert.rejects(() => fetchWithFailover((key) => `https://x/?apiKey=${key}`));
+  } finally {
+    global.fetch = orig;
+  }
+});
 test("allowAction permits, blocks within interval, allows after, independent per action", () => {
   resetRl();
   const t0 = 1_000_000;
