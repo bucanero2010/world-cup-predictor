@@ -40,7 +40,59 @@ body {
   padding: 36px 20px 72px;
 }
 
-/* ---- masthead ---- */
+/* ---- masthead + site nav ---- */
+.masthead {
+  border-bottom: 3px double var(--ink);
+  padding-bottom: 14px;
+  margin-bottom: 22px;
+}
+.mastline {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+.wordmark {
+  font-family: var(--serif);
+  font-weight: 700;
+  font-size: 2.1rem;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+  text-decoration: none;
+}
+.kicker {
+  font-family: var(--mono);
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  color: var(--ink-soft);
+}
+.sitenav {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 14px;
+}
+.navtab {
+  font-family: var(--sans);
+  font-size: 0.86rem;
+  font-weight: 500;
+  color: var(--ink-soft);
+  text-decoration: none;
+  padding: 6px 12px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+}
+.navtab:hover { color: var(--ink); background: var(--paper-2); }
+.navtab.active {
+  color: var(--chalk);
+  background: var(--pitch);
+  border-color: var(--pitch-dk);
+}
+
+/* legacy single-page header (kept for safety) */
 .header {
   display: flex;
   justify-content: space-between;
@@ -383,3 +435,29 @@ td { font-variant-numeric: tabular-nums; }
 .earned.exact { color: var(--pitch); }
 .earned.close { color: var(--pitch-dk); }
 .earned.wrong { color: var(--flag-red); }
+
+/* ---- methodology prose ---- */
+.prose {
+  background: var(--chalk);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  padding: 28px 30px;
+  max-width: 68ch;
+}
+.prose h2 {
+  font-family: var(--serif);
+  font-size: 1.25rem;
+  font-weight: 600;
+  margin: 26px 0 8px;
+  color: var(--ink);
+}
+.prose h2:first-child { margin-top: 0; }
+.prose p { margin: 0 0 12px; color: var(--ink); }
+.prose ul { margin: 0 0 14px; padding-left: 22px; }
+.prose li { margin-bottom: 5px; }
+.prose .mono { font-family: var(--mono); color: var(--pitch); }
+.prose .note {
+  border-left: 3px solid var(--rule);
+  padding-left: 12px;
+  font-style: italic;
+}

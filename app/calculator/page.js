@@ -5,6 +5,7 @@ import { scoreGrid } from "@/lib/poisson.js";
 import { fromOdds } from "@/lib/odds.js";
 import { rankPicks, outcomeProbs } from "@/lib/optimizer.js";
 import { devigBest, proportionalDevig } from "@/lib/shin.js";
+import SiteHeader from "@/components/SiteHeader.jsx";
 
 const pct = (x) => `${(x * 100).toFixed(1)}%`;
 
@@ -72,11 +73,7 @@ export default function Home() {
 
   return (
     <main className="wrap">
-      <h1>World Cup Predictor</h1>
-      <p className="sub">
-        Find the scoreline that maximizes your expected Superbru points. Picks
-        are scored 3 / 1.5 / 1 / 0 (exact / close / result / wrong).
-      </p>
+      <SiteHeader tagline="What-if calculator: enter expected goals or market odds for any matchup and see the optimal pick." />
 
       <div className="panel">
         <div className="row" style={{ marginBottom: 16 }}>
