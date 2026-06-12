@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import Logo from "./Logo.jsx";
 
 const TABS = [
   { href: "/", label: "Predictor" },
@@ -16,6 +17,7 @@ export default function SiteHeader({ tagline }) {
     <header className="masthead">
       <div className="mastline">
         <Link href="/" className="wordmark">
+          <span className="wordmark-logo"><Logo size={30} /></span>
           World Cup Predictor
         </Link>
         <span className="kicker">Superbru EV picks</span>

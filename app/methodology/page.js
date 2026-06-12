@@ -7,102 +7,226 @@ export const metadata = {
 export default function MethodologyPage() {
   return (
     <main className="wrap">
-      <SiteHeader tagline="How the picks are calculated, in plain English." />
+      <SiteHeader tagline="How the picks are calculated — the short, visual version." />
 
-      <article className="prose">
-        <h2>The goal</h2>
-        <p>
-          In Superbru you predict the exact scoreline of each match. Points are awarded
-          like this:
+      {/* Scoring rules as cards */}
+      <section className="m-section">
+        <h2 className="m-h2">The scoring</h2>
+        <p className="m-lead">
+          Superbru rewards being close, not just exact. Every pick lands in one of four
+          bands:
         </p>
-        <ul>
-          <li><strong>3 points</strong> — exact score.</li>
-          <li><strong>1.5 points</strong> — right winner and a close score (1 goal out, or 2 out with the right goal difference).</li>
-          <li><strong>1 point</strong> — right winner, but not close.</li>
-          <li><strong>0 points</strong> — wrong winner.</li>
-        </ul>
-        <p>
-          This app finds the single scoreline that earns the most points <em>on average</em>
-          — your best long-run bet, not just the most likely result.
-        </p>
+        <div className="scoregrid">
+          <div className="scorecell s3"><span className="pts">3</span><span className="lbl">Exact score</span></div>
+          <div className="scorecell s15"><span className="pts">1.5</span><span className="lbl">Right result, close score</span></div>
+          <div className="scorecell s1"><span className="pts">1</span><span className="lbl">Right result only</span></div>
+          <div className="scorecell s0"><span className="pts">0</span><span className="lbl">Wrong result</span></div>
+        </div>
+      </section>
 
-        <h2>Step 1 — Start from the betting market</h2>
-        <p>
-          Bookmakers&apos; odds are the sharpest available forecast of a match. We take the
-          odds from <strong>Pinnacle</strong> (a book known for accurate pricing) for the
-          match winner and the over/under goals line.
+      {/* Pipeline */}
+      <section className="m-section">
+        <h2 className="m-h2">The pipeline</h2>
+        <p className="m-lead">
+          We turn betting odds into the single highest-scoring pick in four steps.
         </p>
-        <p>
-          Raw odds include the bookmaker&apos;s built-in profit margin, so we strip that out
-          to get the &ldquo;true&rdquo; probabilities. We use a method called{" "}
-          <strong>Shin&apos;s method</strong>, which is better than naive approaches at
-          handling big favourites — common in World Cup group games.
-        </p>
+        <Pipeline />
+      </section>
 
-        <h2>Step 2 — Turn probabilities into expected goals</h2>
+      {/* Step 1 */}
+      <section className="m-section">
+        <h2 className="m-h2"><span className="step-num">1</span> Strip the bookmaker margin</h2>
         <p>
-          From those probabilities we work backwards to estimate how many goals each team is
-          expected to score (their &ldquo;attacking rate&rdquo;). A heavy favourite against a
-          weak side might come out around 2.2 expected goals to 0.6, for example.
+          Bookmakers&apos; odds are the sharpest forecast available, but they bake in a
+          profit margin so the implied probabilities sum to more than 100%. We use{" "}
+          <strong>Shin&apos;s method</strong> to remove it and recover fair probabilities
+          that better handle big favourites.
         </p>
+        <div className="formula">
+          <span className="fl">p<sub>i</sub></span> ={" "}
+          <span className="frac">
+            <span className="num">√(z² + 4(1−z)·π<sub>i</sub>²/B) − z</span>
+            <span className="den">2(1 − z)</span>
+          </span>
+        </div>
+        <p className="m-cap">
+          where π<sub>i</sub> = 1/odds<sub>i</sub>, B = Σπ<sub>i</sub> (the booksum), and
+          z is solved so the fair probabilities sum to 1.
+        </p>
+      </section>
 
-        <h2>Step 3 — Build every possible scoreline</h2>
+      {/* Step 2 */}
+      <section className="m-section">
+        <h2 className="m-h2"><span className="step-num">2</span> Back out expected goals</h2>
         <p>
-          Using those expected-goal rates we calculate the probability of <em>every</em>
-          scoreline: 0-0, 1-0, 2-1, 3-2, and so on. This uses a well-established football
-          model (Poisson with a Dixon-Coles correction) that nudges the low-scoring,
-          common scorelines to match real-world data.
+          From those probabilities we solve for each team&apos;s scoring rate, λ (expected
+          goals). A strong favourite might come out around λ<sub>home</sub> = 2.1 versus
+          λ<sub>away</sub> = 0.6.
         </p>
+      </section>
 
-        <h2>Step 4 — Score every candidate pick</h2>
+      {/* Step 3 */}
+      <section className="m-section">
+        <h2 className="m-h2"><span className="step-num">3</span> Build every scoreline</h2>
         <p>
-          For each scoreline you <em>could</em> pick, we ask: across all the ways the match
-          might actually end, how many Superbru points would this pick earn on average? The
-          pick with the highest average wins.
+          The probability of each exact scoreline comes from a Poisson model (with a
+          Dixon-Coles correction that fixes low-scoring games):
         </p>
+        <div className="formula">
+          P(h, a) ={" "}
+          <span className="frac"><span className="num">λ<sub>h</sub><sup>h</sup> e<sup>−λ<sub>h</sub></sup></span><span className="den">h!</span></span>
+          ·
+          <span className="frac"><span className="num">λ<sub>a</sub><sup>a</sup> e<sup>−λ<sub>a</sub></sup></span><span className="den">a!</span></span>
+          · τ
+        </div>
+        <p className="m-cap">τ is the Dixon-Coles adjustment for the 0-0, 1-0, 0-1 and 1-1 scores.</p>
+      </section>
 
-        <h2>Why the best pick often isn&apos;t the most likely score</h2>
+      {/* Step 4 */}
+      <section className="m-section">
+        <h2 className="m-h2"><span className="step-num">4</span> Pick the highest expected points</h2>
         <p>
-          This is the clever part. Because the &ldquo;close&rdquo; rule gives partial credit
-          for being one goal off, the best pick is usually a <strong>central</strong>
-          scoreline — one surrounded by other likely results — rather than the single most
-          probable one.
+          For every scoreline you <em>could</em> pick, we compute the average points it
+          earns across all the ways the match might end, and choose the best one:
         </p>
-        <p>
-          Example: for a strong favourite, <span className="mono">1-0</span> might be the
-          single most likely score, but <span className="mono">2-0</span> often scores more
-          on average, because it&apos;s &ldquo;close&rdquo; to 1-0, 2-1, 3-0 <em>and</em> 3-1,
-          so it collects partial points far more often.
-        </p>
+        <div className="formula">
+          EV(pick) = Σ<sub>all scores</sub> P(score) · points(pick, score)
+        </div>
+      </section>
 
-        <h2>Why draws are rarely recommended</h2>
+      {/* The key insight with a chart */}
+      <section className="m-section highlight">
+        <h2 className="m-h2">Why the best pick isn&apos;t the most likely score</h2>
         <p>
-          Even between two equal teams, a draw is the <em>least</em> likely of the three
-          outcomes — there are simply more ways to win or lose than to draw. So a draw is
-          only the best pick in low-scoring, very evenly-matched games.
+          Because &ldquo;close&rdquo; pays 1.5, a <strong>central</strong> pick that&apos;s
+          near many likely scores beats an isolated one. Below: for a favourite, 1-0 is the
+          single most likely score, but <strong>2-0 earns more on average</strong> — it
+          collects partial credit from 1-0, 2-1, 3-0 and 3-1.
         </p>
+        <CentralPickChart />
+      </section>
 
-        <h2>How results are tracked</h2>
+      {/* Draws */}
+      <section className="m-section">
+        <h2 className="m-h2">Why draws are rare picks</h2>
         <p>
-          After a match finishes, the app pulls the final score and records how many points
-          the recommended pick would have earned. The <strong>Past Results</strong> page
-          tallies these into a running scorecard — so you can see how the model actually
-          performs over the tournament.
+          Even between equal teams, the draw is the <em>least</em> likely of the three
+          outcomes — there are more ways to win or lose than to draw. So draws are only
+          optimal in low-scoring, evenly-matched games.
         </p>
-        <p className="note">
-          One caveat: a match can only be scored if its odds were captured <em>before</em>
-          kickoff. Matches that finished before the first odds refresh can&apos;t be graded,
-          because we no longer know what the model would have picked.
-        </p>
+        <OutcomeBars />
+      </section>
 
-        <h2>What this is not</h2>
+      {/* Tracking + non-goals */}
+      <section className="m-section">
+        <h2 className="m-h2">Tracking performance</h2>
         <p>
-          The picks maximize expected points per match in isolation. They don&apos;t (yet)
-          account for pool strategy — e.g. taking riskier picks when you&apos;re behind your
-          friends, or safer ones when you&apos;re ahead. That&apos;s a possible future
-          addition.
+          After each match, the final score is pulled and the recommended pick is scored.
+          <strong> Past Results</strong> tallies a running total.
         </p>
-      </article>
+        <p className="m-note">
+          A match can only be graded if its odds were captured before kickoff — games that
+          finished before the first odds refresh can&apos;t be scored.
+        </p>
+        <p className="m-note">
+          Picks maximize expected points per match in isolation; pool strategy (riskier
+          picks when behind) is a possible future addition.
+        </p>
+      </section>
     </main>
+  );
+}
+
+/* ---------- SVG diagrams ---------- */
+
+function Pipeline() {
+  const steps = [
+    { t: "Market odds", s: "Pinnacle 1X2 + totals" },
+    { t: "Fair probs", s: "Shin de-vig" },
+    { t: "Expected goals λ", s: "solve from probs" },
+    { t: "Scoreline grid", s: "Dixon-Coles Poisson" },
+    { t: "Best pick", s: "max expected points" },
+  ];
+  return (
+    <div className="pipeline">
+      {steps.map((st, i) => (
+        <div className="pipe-wrap" key={st.t}>
+          <div className={`pipe-node ${i === steps.length - 1 ? "final" : ""}`}>
+            <span className="pipe-t">{st.t}</span>
+            <span className="pipe-s">{st.s}</span>
+          </div>
+          {i < steps.length - 1 && <span className="pipe-arrow">→</span>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function CentralPickChart() {
+  // EV values from the model for a ~2.0/0.6 favourite (illustrative, matches app output).
+  const data = [
+    { pick: "1-0", ev: 1.05, prob: 0.151 },
+    { pick: "2-0", ev: 1.10, prob: 0.138, best: true },
+    { pick: "2-1", ev: 0.99, prob: 0.091 },
+    { pick: "3-0", ev: 0.92, prob: 0.081 },
+    { pick: "0-0", ev: 0.77, prob: 0.090 },
+  ];
+  const W = 460, H = 220, padL = 40, padB = 34, padT = 12;
+  const maxEv = 1.2;
+  const bw = (W - padL - 16) / data.length;
+  const y = (v) => padT + (1 - v / maxEv) * (H - padT - padB);
+  return (
+    <svg className="chart" viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Expected points by pick">
+      {/* axes */}
+      <line x1={padL} y1={H - padB} x2={W - 4} y2={H - padB} stroke="var(--rule)" />
+      {[0, 0.4, 0.8, 1.2].map((g) => (
+        <g key={g}>
+          <line x1={padL} y1={y(g)} x2={W - 4} y2={y(g)} stroke="var(--line)" strokeDasharray="2 3" />
+          <text x={padL - 6} y={y(g) + 3} textAnchor="end" className="chart-tick">{g}</text>
+        </g>
+      ))}
+      {data.map((d, i) => {
+        const x = padL + 8 + i * bw;
+        const top = y(d.ev);
+        return (
+          <g key={d.pick}>
+            <rect
+              x={x} y={top} width={bw - 16} height={H - padB - top}
+              className={d.best ? "bar best" : "bar"} rx="2"
+            />
+            <text x={x + (bw - 16) / 2} y={top - 5} textAnchor="middle" className="bar-val">
+              {d.ev.toFixed(2)}
+            </text>
+            <text x={x + (bw - 16) / 2} y={H - padB + 15} textAnchor="middle" className="bar-lbl">
+              {d.pick}
+            </text>
+          </g>
+        );
+      })}
+      <text x={padL} y={padT + 2} className="chart-axis">avg points (EV)</text>
+    </svg>
+  );
+}
+
+function OutcomeBars() {
+  // Two equal teams (λ 1.2 each): home / draw / away.
+  const data = [
+    { k: "Home win", v: 0.36 },
+    { k: "Draw", v: 0.29, dim: true },
+    { k: "Away win", v: 0.36 },
+  ];
+  return (
+    <div className="obars">
+      {data.map((d) => (
+        <div className="obar-row" key={d.k}>
+          <span className="obar-k">{d.k}</span>
+          <span className="obar-track">
+            <span className={`obar-fill ${d.dim ? "dim" : ""}`} style={{ width: `${d.v * 100 / 0.4 * 0.9}%` }} />
+          </span>
+          <span className="obar-v">{Math.round(d.v * 100)}%</span>
+        </div>
+      ))}
+      <p className="m-cap">Two evenly-matched teams — the draw is the smallest slice.</p>
+    </div>
   );
 }

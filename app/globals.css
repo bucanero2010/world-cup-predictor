@@ -61,7 +61,12 @@ body {
   letter-spacing: -0.02em;
   color: var(--ink);
   text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
 }
+.wordmark-logo { color: var(--pitch); display: inline-flex; }
+.logo { display: block; }
 .kicker {
   font-family: var(--mono);
   font-size: 0.72rem;
@@ -436,28 +441,123 @@ td { font-variant-numeric: tabular-nums; }
 .earned.close { color: var(--pitch-dk); }
 .earned.wrong { color: var(--flag-red); }
 
-/* ---- methodology prose ---- */
-.prose {
+/* ---- methodology (visual) ---- */
+.m-section {
   background: var(--chalk);
   border: 1px solid var(--line);
   border-radius: 4px;
-  padding: 28px 30px;
-  max-width: 68ch;
+  padding: 22px 24px;
+  margin-bottom: 16px;
 }
-.prose h2 {
+.m-section.highlight { border-color: var(--pitch); border-left: 3px solid var(--pitch); }
+.m-h2 {
   font-family: var(--serif);
-  font-size: 1.25rem;
+  font-size: 1.3rem;
   font-weight: 600;
-  margin: 26px 0 8px;
+  margin: 0 0 10px;
   color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
-.prose h2:first-child { margin-top: 0; }
-.prose p { margin: 0 0 12px; color: var(--ink); }
-.prose ul { margin: 0 0 14px; padding-left: 22px; }
-.prose li { margin-bottom: 5px; }
-.prose .mono { font-family: var(--mono); color: var(--pitch); }
-.prose .note {
+.step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: var(--pitch);
+  color: var(--chalk);
+  font-family: var(--mono);
+  font-size: 0.95rem;
+  flex: none;
+}
+.m-section p { margin: 0 0 10px; color: var(--ink); }
+.m-lead { color: var(--ink-soft); }
+.m-cap { font-size: 0.82rem; color: var(--ink-soft); }
+.m-note {
+  font-size: 0.85rem;
+  color: var(--ink-soft);
   border-left: 3px solid var(--rule);
   padding-left: 12px;
   font-style: italic;
 }
+
+/* scoring band cards */
+.scoregrid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+.scorecell {
+  border-radius: 4px;
+  padding: 14px 12px;
+  text-align: center;
+  border: 1px solid var(--line);
+}
+.scorecell .pts { display: block; font-family: var(--mono); font-size: 1.7rem; font-weight: 600; }
+.scorecell .lbl { font-size: 0.74rem; color: var(--ink-soft); }
+.scorecell.s3 { background: #e8f3ea; border-color: var(--pitch); }
+.scorecell.s3 .pts { color: var(--pitch); }
+.scorecell.s15 { background: #eef4ec; }
+.scorecell.s15 .pts { color: var(--pitch-dk); }
+.scorecell.s1 .pts { color: var(--ink); }
+.scorecell.s0 { background: #f6ecea; }
+.scorecell.s0 .pts { color: var(--flag-red); }
+@media (max-width: 560px) { .scoregrid { grid-template-columns: repeat(2, 1fr); } }
+
+/* pipeline */
+.pipeline { display: flex; flex-wrap: wrap; align-items: stretch; gap: 6px; }
+.pipe-wrap { display: flex; align-items: center; gap: 6px; }
+.pipe-node {
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 10px 12px;
+  min-width: 120px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.pipe-node.final { background: var(--pitch); border-color: var(--pitch-dk); }
+.pipe-node.final .pipe-t { color: var(--chalk); }
+.pipe-node.final .pipe-s { color: #cfe6d6; }
+.pipe-t { font-weight: 600; font-size: 0.86rem; }
+.pipe-s { font-size: 0.72rem; color: var(--ink-soft); font-family: var(--mono); }
+.pipe-arrow { color: var(--pitch); font-size: 1.1rem; }
+
+/* formula */
+.formula {
+  font-family: var(--mono);
+  font-size: 1.05rem;
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  padding: 16px 18px;
+  margin: 8px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  color: var(--ink);
+}
+.formula .fl { color: var(--pitch); }
+.frac { display: inline-flex; flex-direction: column; text-align: center; vertical-align: middle; }
+.frac .num { border-bottom: 1px solid var(--ink); padding: 0 6px 2px; }
+.frac .den { padding: 2px 6px 0; }
+
+/* central-pick chart */
+.chart { width: 100%; height: auto; margin-top: 8px; }
+.chart .bar { fill: var(--rule); }
+.chart .bar.best { fill: var(--pitch); }
+.chart .bar-val { font-family: var(--mono); font-size: 11px; fill: var(--ink-soft); }
+.chart .bar-lbl { font-family: var(--mono); font-size: 12px; fill: var(--ink); }
+.chart .chart-tick { font-family: var(--mono); font-size: 10px; fill: var(--ink-soft); }
+.chart .chart-axis { font-size: 11px; fill: var(--ink-soft); }
+
+/* outcome bars */
+.obars { margin-top: 6px; }
+.obar-row { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+.obar-k { width: 80px; font-size: 0.85rem; }
+.obar-track { flex: 1; height: 20px; background: var(--paper-2); border-radius: 3px; overflow: hidden; }
+.obar-fill { display: block; height: 100%; background: var(--pitch); }
+.obar-fill.dim { background: var(--rule); }
+.obar-v { width: 42px; text-align: right; font-family: var(--mono); font-size: 0.85rem; }
+
