@@ -173,7 +173,7 @@ export default function Home() {
           Compute best pick
         </button>
         {err && (
-          <p className="note" style={{ color: "#ff8080" }}>
+          <p className="note" style={{ color: "#b23a32" }}>
             {err}
           </p>
         )}
