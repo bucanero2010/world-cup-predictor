@@ -445,20 +445,41 @@ td { font-variant-numeric: tabular-nums; }
 .detail-cols table { flex: 1; min-width: 220px; }
 
 /* heatmap */
-.heatwrap { flex: 0 0 auto; }
-.heat-axis-label { font-size: 0.68rem; color: var(--ink-soft); font-family: var(--mono); margin-bottom: 2px; }
-.heatmap { border-collapse: collapse; }
-.heatmap td, .heatmap th { border: none; padding: 0; }
+.heatwrap { flex: 0 0 auto; margin: 0; }
+.heat-title { font-size: 0.78rem; color: var(--ink); font-weight: 600; margin-bottom: 6px; }
+.heat-toplabel { font-size: 0.7rem; color: var(--ink-soft); font-family: var(--mono); margin-left: 30px; }
+.heat-colnums { display: flex; }
+.heat-num { font-family: var(--mono); font-size: 0.66rem; color: var(--ink-soft); }
+.heat-cellw { width: 28px; text-align: center; }
+.heat-spacer { width: 16px; }
+.heat-body { display: flex; align-items: stretch; }
+.heat-sidelabel {
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  font-size: 0.7rem;
+  color: var(--ink-soft);
+  font-family: var(--mono);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding-right: 2px;
+}
+.heat-rows { display: flex; flex-direction: column; }
+.heat-row { display: flex; align-items: center; }
+.heat-rownum { width: 16px; text-align: center; }
 .heat-cell {
-  width: 26px; height: 26px;
-  text-align: center;
+  width: 28px;
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--mono);
   font-size: 0.68rem;
   color: var(--ink);
-  border: 1px solid var(--paper) !important;
+  border: 1px solid var(--paper);
 }
 .heat-cell.pick { outline: 2px solid var(--flag-red); outline-offset: -2px; font-weight: 700; }
-.heat-h, .heat-a { font-family: var(--mono); font-size: 0.64rem; color: var(--ink-soft); width: 18px; text-align: center; }
+.heat-foot { font-size: 0.7rem; color: var(--ink-soft); margin-top: 6px; max-width: 230px; }
 
 /* refine */
 .refine { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }

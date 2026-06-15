@@ -57,7 +57,14 @@ export default function MatchRow({ card }) {
         </div>
       )}
 
-      {open && !pending && <MatchDetail recommendation={card.recommendation} eventId={card.eventId} />}
+      {open && !pending && (
+        <MatchDetail
+          recommendation={card.recommendation}
+          eventId={card.eventId}
+          homeTeam={card.homeTeam}
+          awayTeam={card.awayTeam}
+        />
+      )}
     </div>
   );
 }

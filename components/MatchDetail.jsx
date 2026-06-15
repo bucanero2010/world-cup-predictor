@@ -7,46 +7,56 @@ const fmtPick = (p) => `${p[0]}\u2013${p[1]}`;
 
 const EDGE_LABEL = { clear: "clear edge", slight: "slight edge", tossup: "toss-up" };
 
-function Heatmap({ matrix, pick }) {
+function Heatmap({ matrix, pick, homeTeam, awayTeam }) {
   if (!matrix) return null;
   const max = Math.max(...matrix.flat());
+  const n = matrix[0].length;
   return (
-    <div className="heatwrap">
-      <div className="heat-axis-label heat-away">away goals →</div>
-      <table className="heatmap">
-        <tbody>
+    <figure className="heatwrap">
+      <figcaption className="heat-title">Probability of each exact score (%)</figcaption>
+
+      {/* away axis label + column numbers, indented to clear the row labels */}
+      <div className="heat-toplabel">{awayTeam} goals →</div>
+      <div className="heat-colnums">
+        <span className="heat-num heat-spacer" />
+        {Array.from({ length: n }, (_, a) => (
+          <span key={a} className="heat-num heat-cellw">{a}</span>
+        ))}
+      </div>
+
+      <div className="heat-body">
+        <div className="heat-sidelabel"><span>{homeTeam} goals ↓</span></div>
+        <div className="heat-rows">
           {matrix.map((row, h) => (
-            <tr key={h}>
-              <th className="heat-h">{h}</th>
+            <div key={h} className="heat-row">
+              <span className="heat-num heat-rownum">{h}</span>
               {row.map((p, a) => {
                 const isPick = pick && pick[0] === h && pick[1] === a;
                 const intensity = max > 0 ? p / max : 0;
                 return (
-                  <td
+                  <span
                     key={a}
                     className={`heat-cell ${isPick ? "pick" : ""}`}
                     style={{ background: `rgba(31,107,59,${(intensity * 0.85).toFixed(3)})` }}
-                    title={`${h}-${a}: ${pct(p)}`}
+                    title={`${homeTeam} ${h} – ${a} ${awayTeam}: ${pct(p)}`}
                   >
                     {p >= 0.04 ? Math.round(p * 100) : ""}
-                  </td>
+                  </span>
                 );
               })}
-            </tr>
+            </div>
           ))}
-          <tr>
-            <th className="heat-h">↓h</th>
-            {matrix[0].map((_, a) => (
-              <th key={a} className="heat-a">{a}</th>
-            ))}
-          </tr>
-        </tbody>
-      </table>
-    </div>
+        </div>
+      </div>
+
+      <figcaption className="heat-foot">
+        Rows = {homeTeam} goals, columns = {awayTeam} goals. Your pick is outlined in red.
+      </figcaption>
+    </figure>
   );
 }
 
-export default function MatchDetail({ recommendation, eventId }) {
+export default function MatchDetail({ recommendation, eventId, homeTeam, awayTeam }) {
   const [rec, setRec] = useState(recommendation);
   const [refining, setRefining] = useState(false);
   const [refineMsg, setRefineMsg] = useState(null);
@@ -111,7 +121,7 @@ export default function MatchDetail({ recommendation, eventId }) {
           </tbody>
         </table>
 
-        <Heatmap matrix={r.heatmap} pick={r.pick} />
+        <Heatmap matrix={r.heatmap} pick={r.pick} homeTeam={homeTeam} awayTeam={awayTeam} />
       </div>
 
       <div className="bands">
