@@ -14,7 +14,7 @@ export default async function PredictorPage() {
     <main className="wrap">
       <SiteHeader tagline="Scorelines that maximize your expected Superbru points. Times in Madrid — tap a match for the full breakdown." />
 
-      <ActionBar meta={data.meta} />
+      <ActionBar meta={data.meta} credits={data.credits} />
 
       {data.error && <div className="warning">{data.error}</div>}
 

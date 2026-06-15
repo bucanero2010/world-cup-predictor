@@ -3,7 +3,8 @@
 
 import { NextResponse } from "next/server";
 import { fetchScores } from "@/lib/scoresProvider.js";
-import { getAllMatches, freezeResult, setMeta, initSchema } from "@/lib/db.js";
+import { getLastUsage } from "@/lib/providerFetch.js";
+import { getAllMatches, freezeResult, setMeta, setCredit, initSchema } from "@/lib/db.js";
 import { points } from "@/lib/scoring.js";
 import { allowAction } from "@/lib/rateLimit.js";
 
@@ -54,6 +55,8 @@ export async function POST() {
     }
     const ts = new Date().toISOString();
     await setMeta("results_last_updated", ts);
+    const usage = getLastUsage();
+    if (usage) await setCredit(usage.keyIndex, usage.remaining);
     return NextResponse.json({ closed, skipped, resultsLastUpdated: ts });
   } catch {
     return NextResponse.json({ error: "Failed to store results." }, { status: 500 });

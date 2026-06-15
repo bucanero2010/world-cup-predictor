@@ -302,6 +302,7 @@ td { font-variant-numeric: tabular-nums; }
   font-family: var(--mono);
 }
 .actionmsg { color: var(--pitch); font-family: var(--sans); }
+.credits .cred-low { color: var(--flag-red); font-weight: 600; }
 
 .emptyprompt {
   background: var(--chalk);

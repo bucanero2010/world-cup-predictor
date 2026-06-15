@@ -3,7 +3,8 @@
 
 import { NextResponse } from "next/server";
 import { fetchAllOdds } from "@/lib/oddsProvider.js";
-import { upsertMatchOdds, setMeta, initSchema } from "@/lib/db.js";
+import { getLastUsage } from "@/lib/providerFetch.js";
+import { upsertMatchOdds, setMeta, setCredit, initSchema } from "@/lib/db.js";
 import { buildCard } from "@/lib/card.js";
 import { allowAction } from "@/lib/rateLimit.js";
 
@@ -39,6 +40,9 @@ export async function POST() {
     }
     const ts = new Date().toISOString();
     await setMeta("odds_last_refreshed", ts);
+    // Record the live credit balance reported by the provider.
+    const usage = getLastUsage();
+    if (usage) await setCredit(usage.keyIndex, usage.remaining);
     return NextResponse.json({ updated, oddsLastRefreshed: ts });
   } catch (err) {
     return NextResponse.json({ error: "Failed to store odds." }, { status: 500 });

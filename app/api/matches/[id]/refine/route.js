@@ -4,7 +4,8 @@
 
 import { NextResponse } from "next/server";
 import { fetchEventAltTotals } from "@/lib/oddsProvider.js";
-import { getAllMatches, upsertMatchOdds } from "@/lib/db.js";
+import { getLastUsage } from "@/lib/providerFetch.js";
+import { getAllMatches, upsertMatchOdds, setCredit } from "@/lib/db.js";
 import { recommendForMatch } from "@/lib/recommend.js";
 import { flagFor } from "@/lib/flags.js";
 import { allowAction } from "@/lib/rateLimit.js";
@@ -72,6 +73,11 @@ export async function POST(_req, { params }) {
       await upsertMatchOdds(card);
     } catch {
       // fall through — still return the refined result even if the write fails
+    }
+
+    const usage = getLastUsage();
+    if (usage) {
+      try { await setCredit(usage.keyIndex, usage.remaining); } catch {}
     }
 
     return NextResponse.json({ recommendation, lines: ladder.length });

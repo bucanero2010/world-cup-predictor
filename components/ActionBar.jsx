@@ -9,7 +9,7 @@ function lastUpdatedLabel(iso) {
   return formatKickoff(iso); // "Thu 11 Jun, HH:MM TZ" in Madrid
 }
 
-export default function ActionBar({ meta }) {
+export default function ActionBar({ meta, credits }) {
   const router = useRouter();
   const [busy, setBusy] = useState(null); // "odds" | "results" | null
   const [msg, setMsg] = useState(null);
@@ -63,6 +63,17 @@ export default function ActionBar({ meta }) {
       <div className="actionmeta">
         <span>odds: {lastUpdatedLabel(meta?.oddsLastRefreshed)}</span>
         <span>results: {lastUpdatedLabel(meta?.resultsLastUpdated)}</span>
+        {Array.isArray(credits) && credits.length > 0 && (
+          <span className="credits">
+            credits:{" "}
+            {credits.map((c, i) => (
+              <span key={c.keyIndex} className={c.remaining <= 50 ? "cred-low" : ""}>
+                {i > 0 && " / "}
+                {c.keyIndex === 0 ? "primary" : "backup"} {c.remaining}
+              </span>
+            ))}
+          </span>
+        )}
         {msg && <span className="actionmsg">{msg}</span>}
       </div>
     </div>
