@@ -419,22 +419,6 @@ td { font-variant-numeric: tabular-nums; }
   color: var(--ink-soft);
 }
 
-/* robustness indicator */
-.robust { display: flex; align-items: center; gap: 10px; margin-top: 12px; flex-wrap: wrap; }
-.robust-badge {
-  font-family: var(--sans);
-  font-size: 0.72rem;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  padding: 3px 9px;
-  border-radius: 2px;
-}
-.robust-badge.solid { background: #e8f3ea; color: var(--pitch); border: 1px solid var(--pitch); }
-.robust-badge.leaning { background: #f6ecd9; color: #8a6a1f; border: 1px solid var(--gold); }
-.robust-badge.tossup { background: #f6ecea; color: var(--flag-red); border: 1px solid var(--flag-red); }
-.robust-text { font-size: 0.8rem; color: var(--ink-soft); }
-
 /* ---- closed match ---- */
 .matchrow.closed {
   background: var(--paper-2);

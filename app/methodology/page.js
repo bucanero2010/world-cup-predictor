@@ -206,27 +206,6 @@ export default function MethodologyPage() {
 
       {/* Tracking + non-goals */}
       <section className="m-section">
-        <h2 className="m-h2">How confident is each pick?</h2>
-        <p>
-          The pipeline stacks several estimates (odds → fair probabilities → expected goals
-          → scoreline grid), so we sanity-check each recommendation with a{" "}
-          <strong>Monte Carlo robustness test</strong>: we jitter the input odds by a few
-          percent, re-run the whole calculation 300 times, and count how often the same
-          pick comes out on top.
-        </p>
-        <div className="scoregrid" style={{ gridTemplateColumns: "repeat(3, 1fr)" }}>
-          <div className="scorecell s3"><span className="lbl"><strong>Solid</strong><br/>holds ≥ 70%</span></div>
-          <div className="scorecell s15"><span className="lbl"><strong>Leaning</strong><br/>holds 45–70%</span></div>
-          <div className="scorecell s0"><span className="lbl"><strong>Toss-up</strong><br/>holds &lt; 45%</span></div>
-        </div>
-        <p className="m-cap">
-          A &ldquo;toss-up&rdquo; means two scorelines are nearly tied on expected points —
-          the model has no strong preference, so either is fine. You&apos;ll see this label
-          in each match&apos;s detail view.
-        </p>
-      </section>
-
-      <section className="m-section">
         <h2 className="m-h2">Tracking performance</h2>
         <p>
           After each match, the final score is pulled and the recommended pick is scored.

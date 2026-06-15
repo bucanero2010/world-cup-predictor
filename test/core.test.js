@@ -9,7 +9,6 @@ import { isLockSoon } from "../lib/lockSoon.js";
 import { flagFor } from "../lib/flags.js";
 import { recommendForMatch, bandBreakdown } from "../lib/recommend.js";
 import { scoreGrid } from "../lib/poisson.js";
-import { robustness } from "../lib/robustness.js";
 
 // ---- Task 1.2: extended fromOdds ----
 test("fromOdds reports method and finite cost", () => {
@@ -172,26 +171,4 @@ test("differsFromModal is set correctly", () => {
   const rec = recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] });
   const isSame = rec.pick[0] === rec.modal[0] && rec.pick[1] === rec.modal[1];
   assert.equal(rec.differsFromModal, !isSame);
-});
-
-// ---- robustness ----
-test("robustness: stability in [0,1] and valid label", () => {
-  const r = robustness({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] }, { trials: 120 });
-  assert.ok(r.stability >= 0 && r.stability <= 1);
-  assert.ok(["solid", "leaning", "tossup"].includes(r.label));
-  assert.ok(r.alternatives.length >= 1);
-});
-
-test("robustness: deterministic for the same odds", () => {
-  const odds = { oneXtwo: [1.8, 3.6, 4.5], totalLine: 2.5 };
-  const a = robustness(odds, { trials: 100 });
-  const b = robustness(odds, { trials: 100 });
-  assert.equal(a.stability, b.stability);
-  assert.equal(a.label, b.label);
-});
-
-test("robustness: heavy favourite is more stable than a coin-flip match", () => {
-  const fav = robustness({ oneXtwo: [1.2, 6.5, 13], totalLine: 2.5 }, { trials: 200 });
-  const even = robustness({ oneXtwo: [2.6, 3.1, 2.7], totalLine: 2.5 }, { trials: 200 });
-  assert.ok(fav.stability >= even.stability);
 });

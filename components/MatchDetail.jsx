@@ -1,37 +1,9 @@
 "use client";
 
-import { useEffect, useState } from "react";
-
 const pct = (x) => `${(x * 100).toFixed(1)}%`;
 const fmtPick = (p) => `${p[0]}\u2013${p[1]}`;
 
-export default function MatchDetail({ recommendation, eventId }) {
-  const [robust, setRobust] = useState(null);
-  const [robustState, setRobustState] = useState("loading"); // loading | done | error
-
-  // Robustness is expensive (~200 re-solves), so it's computed on-demand here rather
-  // than during the bulk refresh. Fetch it once when the detail view mounts.
-  useEffect(() => {
-    if (!eventId) return;
-    let cancelled = false;
-    setRobustState("loading");
-    fetch(`/api/matches/${eventId}/robustness`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (cancelled) return;
-        if (d.robustness) {
-          setRobust(d.robustness);
-          setRobustState("done");
-        } else {
-          setRobustState("error");
-        }
-      })
-      .catch(() => !cancelled && setRobustState("error"));
-    return () => {
-      cancelled = true;
-    };
-  }, [eventId]);
-
+export default function MatchDetail({ recommendation }) {
   if (!recommendation) return null;
   const r = recommendation;
 
@@ -82,25 +54,6 @@ export default function MatchDetail({ recommendation, eventId }) {
         <span className="band">result {pct(r.bands.result.p)} → {r.bands.result.ev.toFixed(3)}</span>
         <span className="band">wrong {pct(r.bands.wrong.p)}</span>
       </div>
-
-      {robustState === "loading" && (
-        <div className="robust">
-          <span className="robust-text">checking robustness…</span>
-        </div>
-      )}
-      {robustState === "done" && robust && (
-        <div className="robust">
-          <span className={`robust-badge ${robust.label}`}>
-            {robust.label === "tossup" ? "toss-up" : robust.label}
-          </span>
-          <span className="robust-text">
-            pick holds in {pct(robust.stability)} of {robust.trials} odds perturbations
-            {robust.label !== "solid" && robust.alternatives[1] && (
-              <> · close call with {fmtPick(robust.alternatives[1].pick)}</>
-            )}
-          </span>
-        </div>
-      )}
     </div>
   );
 }
