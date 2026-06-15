@@ -419,6 +419,52 @@ td { font-variant-numeric: tabular-nums; }
   color: var(--ink-soft);
 }
 
+/* why-this-pick + edge */
+.why { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+.why-text { font-size: 0.86rem; color: var(--ink); }
+.edge-badge {
+  flex: none;
+  font-size: 0.68rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  padding: 3px 8px;
+  border-radius: 2px;
+  font-family: var(--sans);
+  white-space: nowrap;
+}
+.edge-badge.clear { background: #e8f3ea; color: var(--pitch); border: 1px solid var(--pitch); }
+.edge-badge.slight { background: #f6ecd9; color: #8a6a1f; border: 1px solid var(--gold); }
+.edge-badge.tossup { background: #f6ecea; color: var(--flag-red); border: 1px solid var(--flag-red); }
+
+.pill.refined { background: var(--pitch); color: var(--chalk); border-color: var(--pitch-dk); }
+
+/* detail two-column layout */
+.detail-cols { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }
+.detail-cols table { flex: 1; min-width: 220px; }
+
+/* heatmap */
+.heatwrap { flex: 0 0 auto; }
+.heat-axis-label { font-size: 0.68rem; color: var(--ink-soft); font-family: var(--mono); margin-bottom: 2px; }
+.heatmap { border-collapse: collapse; }
+.heatmap td, .heatmap th { border: none; padding: 0; }
+.heat-cell {
+  width: 26px; height: 26px;
+  text-align: center;
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--ink);
+  border: 1px solid var(--paper) !important;
+}
+.heat-cell.pick { outline: 2px solid var(--flag-red); outline-offset: -2px; font-weight: 700; }
+.heat-h, .heat-a { font-family: var(--mono); font-size: 0.64rem; color: var(--ink-soft); width: 18px; text-align: center; }
+
+/* refine */
+.refine { display: flex; align-items: center; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+button.secondary.small { padding: 7px 12px; font-size: 0.82rem; }
+.refine-msg { font-size: 0.8rem; color: var(--pitch); }
+.refine-hint { font-size: 0.72rem; color: var(--ink-soft); font-family: var(--mono); }
+
 /* ---- closed match ---- */
 .matchrow.closed {
   background: var(--paper-2);

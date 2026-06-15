@@ -172,3 +172,34 @@ test("differsFromModal is set correctly", () => {
   const isSame = rec.pick[0] === rec.modal[0] && rec.pick[1] === rec.modal[1];
   assert.equal(rec.differsFromModal, !isSame);
 });
+
+// ---- edge / reason / heatmap ----
+test("recommend includes edge with valid level and a reason string", () => {
+  const rec = recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] });
+  assert.ok(["clear", "slight", "tossup"].includes(rec.edge.level));
+  assert.ok(rec.edge.gap >= 0);
+  assert.equal(typeof rec.reason, "string");
+  assert.ok(rec.reason.length > 0);
+});
+
+test("heatmap is a 6x6 matrix summing to <= 1", () => {
+  const rec = recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] });
+  assert.equal(rec.heatmap.length, 6);
+  assert.ok(rec.heatmap.every((row) => row.length === 6));
+  const sum = rec.heatmap.flat().reduce((a, b) => a + b, 0);
+  assert.ok(sum > 0 && sum <= 1.0001);
+});
+
+test("fromOdds fits an alt-totals ladder when provided", () => {
+  const base = fromOdds({ oneXtwo: [1.8, 3.6, 4.5], totalLine: 2.5 });
+  // A ladder skewed toward high scoring should push total lambda up vs the single-line fit.
+  const ladder = [
+    { line: 1.5, overProb: 0.8 },
+    { line: 2.5, overProb: 0.62 },
+    { line: 3.5, overProb: 0.4 },
+  ];
+  const refined = fromOdds({ oneXtwo: [1.8, 3.6, 4.5], totalLine: 2.5, totalsLines: ladder });
+  const baseTot = base.lambdaHome + base.lambdaAway;
+  const refTot = refined.lambdaHome + refined.lambdaAway;
+  assert.ok(refTot > baseTot, `ladder should raise total goals (${refTot} vs ${baseTot})`);
+});
