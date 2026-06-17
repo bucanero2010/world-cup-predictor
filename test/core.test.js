@@ -18,6 +18,16 @@ test("fromOdds reports method and finite cost", () => {
   assert.ok(r.lambdaHome > 0 && r.lambdaAway > 0);
 });
 
+test("fromOdds surfaces a market-consistency fit object", () => {
+  const r = fromOdds({ oneXtwo: [1.5, 4.2, 6.5], totalLine: 2.5, overUnder: [1.95, 1.95] });
+  assert.ok(r.fit);
+  assert.ok(r.fit.implied.home > 0 && r.fit.implied.home < 1);
+  assert.ok(typeof r.fit.consistent === "boolean");
+  assert.ok(r.fit.maxOutcomeResidual >= 0);
+  // A normal favourite with coherent markets should fit within the 3pp threshold.
+  assert.equal(r.fit.consistent, true);
+});
+
 test("fromOdds applies an injected devig function", () => {
   let called = false;
   const stub = (odds) => {

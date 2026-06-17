@@ -102,6 +102,14 @@ export default function MatchDetail({ recommendation, eventId, homeTeam, awayTea
         <span className="pill">λ {r.lambda.home.toFixed(2)} / {r.lambda.away.toFixed(2)}</span>
         <span className="pill">de-vig: {r.devigMethod}</span>
         {r.refined && <span className="pill refined">refined</span>}
+        {r.fit && !r.fit.consistent && (
+          <span
+            className="pill fit-warn"
+            title={`Model fit is ${(r.fit.maxOutcomeResidual * 100).toFixed(1)}pp off the market on at least one outcome — the 1X2 and totals odds disagree, so treat the pick with extra caution.`}
+          >
+            ⚠ uncertain fit
+          </span>
+        )}
       </div>
 
       <div className="detail-cols">

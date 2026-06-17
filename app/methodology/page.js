@@ -131,8 +131,10 @@ export default function MethodologyPage() {
           τ(1,0)=1+λ<sub>a</sub>ρ &nbsp;·&nbsp; τ(1,1)=1−ρ
         </div>
         <p className="m-cap">
-          ρ ≈ −0.05 nudges draws up; everything else is τ = 1. The full grid (0–8 goals each
-          side) is then normalised to sum to 1.
+          ρ is a fixed −0.05 (a typical fitted value from the Dixon-Coles literature, not
+          re-estimated per match — ρ is stable across games). It nudges draws up; every
+          other cell uses τ = 1. The full grid (0–8 goals each side) is then normalised to
+          sum to 1.
         </p>
       </section>
 
@@ -205,6 +207,25 @@ export default function MethodologyPage() {
       </section>
 
       {/* Tracking + non-goals */}
+      <section className="m-section">
+        <h2 className="m-h2">Model fit &amp; honesty checks</h2>
+        <p>
+          λ is solved from two market signals — the 1X2 odds and the over/under line —
+          which bookmakers set semi-independently. When they disagree, no single pair of
+          scoring rates fits both well. After solving, the app recomputes the implied
+          home/draw/away probabilities from its own grid and compares them to the market.
+          If any outcome is more than <strong>3 percentage points</strong> off, the match is
+          tagged <span className="mono">⚠ uncertain fit</span> in its detail view — a signal
+          to trust the pick a little less.
+        </p>
+        <p className="m-note">
+          Other known simplifications: ρ (the draw correction) is a fixed literature value,
+          not fitted per match; knockout-stage caution is only captured insofar as the odds
+          already price it; and picks maximise expected points per match in isolation —
+          there is no pool game theory yet (e.g. taking variance when chasing).
+        </p>
+      </section>
+
       <section className="m-section">
         <h2 className="m-h2">Tracking performance</h2>
         <p>

@@ -439,6 +439,7 @@ td { font-variant-numeric: tabular-nums; }
 .edge-badge.tossup { background: #f6ecea; color: var(--flag-red); border: 1px solid var(--flag-red); }
 
 .pill.refined { background: var(--pitch); color: var(--chalk); border-color: var(--pitch-dk); }
+.pill.fit-warn { background: #f6ecea; color: var(--flag-red); border-color: var(--flag-red); cursor: help; }
 
 /* detail two-column layout */
 .detail-cols { display: flex; gap: 18px; flex-wrap: wrap; align-items: flex-start; }

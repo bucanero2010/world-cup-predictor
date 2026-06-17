@@ -154,6 +154,10 @@ Neon Postgres  ·  The Odds API (h2h + totals; alternate_totals on refine)
 
 ## Notes & limitations
 
+- **λ is fit from two semi-independent markets** (1X2 + totals). When they disagree, no
+  single λ fits both — the app runs a **consistency check** (implied vs market 1X2; >3pp
+  on any outcome flags the match as "uncertain fit" in the UI).
+- **Dixon-Coles ρ is fixed** (−0.05, a typical literature value), not re-fit per match.
 - **Picks are per-match EV-optimal in isolation** — they don't (yet) account for pool
   game theory (e.g. higher-variance picks when chasing). Captured as a future idea.
 - **A match can only be scored if its odds were captured before kickoff** — games that
