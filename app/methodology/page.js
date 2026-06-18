@@ -220,9 +220,11 @@ export default function MethodologyPage() {
         </p>
         <p className="m-note">
           Other known simplifications: ρ (the draw correction) is a fixed literature value,
-          not fitted per match; knockout-stage caution is only captured insofar as the odds
-          already price it; and picks maximise expected points per match in isolation —
-          there is no pool game theory yet (e.g. taking variance when chasing).
+          not fitted per match; picks maximise expected points per match in isolation (no
+          pool game theory yet); and in the <strong>knockout stage</strong> Superbru scores
+          the result after extra time (120 min) while these odds price the 90-minute
+          result — so knockout picks under-state goals and are flagged as approximate.
+          Group-stage matches end at 90 minutes and are unaffected.
         </p>
       </section>
 

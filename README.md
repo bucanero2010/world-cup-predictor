@@ -25,7 +25,11 @@ Because "close" pays partial credit, the highest *expected-points* pick is usual
 1-1). A central pick sits next to many plausible scores, so it banks the 1.5 "close" bonus
 far more often. Finding that pick is the whole point of the app.
 
-Penalty shootouts are scored as the post-regulation/extra-time result (a shootout = draw).
+Penalty shootouts are scored by Superbru as the **end-of-extra-time** result (a shootout
+counts as the 120-minute draw). In the **group stage** matches end at 90 minutes, so the
+model's odds-derived scoreline is exactly the scored result. In the **knockout stage**
+Superbru scores after extra time (120 min) while the odds price the 90-minute result — so
+knockout picks are approximate and the app flags them (see Notes & limitations).
 
 ---
 
@@ -160,6 +164,11 @@ Neon Postgres  ·  The Odds API (h2h + totals; alternate_totals on refine)
 - **Dixon-Coles ρ is fixed** (−0.05, a typical literature value), not re-fit per match.
 - **Picks are per-match EV-optimal in isolation** — they don't (yet) account for pool
   game theory (e.g. higher-variance picks when chasing). Captured as a future idea.
+- **Knockout matches: 90-min odds vs 120-min scoring.** Superbru scores knockouts on the
+  end-of-extra-time result, but The Odds API prices the 90-minute result. The model
+  therefore under-states goals for knockout games; the app shows a caveat on those match
+  details. (Group-stage matches are unaffected — they end at 90 minutes.) A future fix is
+  to switch to extra-time-inclusive markets for knockouts.
 - **A match can only be scored if its odds were captured before kickoff** — games that
   finished before the first odds refresh can't be graded.
 - **No Superbru integration** — Superbru has no public API; you read the recommendation

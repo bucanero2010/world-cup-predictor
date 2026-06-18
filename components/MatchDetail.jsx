@@ -56,7 +56,7 @@ function Heatmap({ matrix, pick, homeTeam, awayTeam }) {
   );
 }
 
-export default function MatchDetail({ recommendation, eventId, homeTeam, awayTeam }) {
+export default function MatchDetail({ recommendation, eventId, homeTeam, awayTeam, stage }) {
   const [rec, setRec] = useState(recommendation);
   const [refining, setRefining] = useState(false);
   const [refineMsg, setRefineMsg] = useState(null);
@@ -64,6 +64,7 @@ export default function MatchDetail({ recommendation, eventId, homeTeam, awayTea
   if (!rec) return null;
   const r = rec;
   const edgeLevel = r.edge?.level ?? "clear";
+  const isKnockout = stage && !/group/i.test(stage);
 
   async function refine() {
     setRefining(true);
@@ -88,6 +89,15 @@ export default function MatchDetail({ recommendation, eventId, homeTeam, awayTea
 
   return (
     <div className="detail">
+      {isKnockout && (
+        <div className="ko-note">
+          <strong>Knockout match.</strong> Superbru scores the result <em>after extra
+          time</em> (120 min); a penalty shootout counts as the 120-min draw. These odds
+          price the 90-minute result, so the model may under-state goals — treat the pick
+          as approximate and lean toward your read of how a tie would break in extra time.
+        </div>
+      )}
+
       {r.reason && (
         <div className="why">
           <span className={`edge-badge ${edgeLevel}`}>{EDGE_LABEL[edgeLevel]}</span>

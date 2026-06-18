@@ -422,6 +422,16 @@ td { font-variant-numeric: tabular-nums; }
 
 /* why-this-pick + edge */
 .why { display: flex; gap: 10px; align-items: flex-start; margin-bottom: 12px; }
+.ko-note {
+  background: #f6e7cf;
+  border: 1px solid var(--gold);
+  color: #6e521c;
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 12px;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
 .why-text { font-size: 0.86rem; color: var(--ink); }
 .edge-badge {
   flex: none;

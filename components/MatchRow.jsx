@@ -63,6 +63,7 @@ export default function MatchRow({ card }) {
           eventId={card.eventId}
           homeTeam={card.homeTeam}
           awayTeam={card.awayTeam}
+          stage={card.group}
         />
       )}
     </div>
