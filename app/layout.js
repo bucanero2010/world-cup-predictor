@@ -1,5 +1,6 @@
 import "./globals.css";
 import ServiceWorker from "@/components/ServiceWorker.jsx";
+import { GameProvider } from "@/components/GameContext.jsx";
 
 export const metadata = {
   title: "World Cup Predictor",
@@ -29,7 +30,7 @@ export default function RootLayout({ children }) {
         <link rel="apple-touch-icon" href="/icon-192.png" />
       </head>
       <body>
-        {children}
+        <GameProvider>{children}</GameProvider>
         <ServiceWorker />
       </body>
     </html>

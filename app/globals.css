@@ -74,6 +74,23 @@ body {
   letter-spacing: 0.12em;
   color: var(--ink-soft);
 }
+.gameswitch {
+  display: inline-flex;
+  border: 1px solid var(--rule);
+  border-radius: 4px;
+  overflow: hidden;
+}
+.gamebtn {
+  font-family: var(--sans);
+  font-size: 0.82rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border: none;
+  background: transparent;
+  color: var(--ink-soft);
+  cursor: pointer;
+}
+.gamebtn.active { background: var(--pitch); color: var(--chalk); }
 .sitenav {
   display: flex;
   flex-wrap: wrap;
@@ -275,6 +292,8 @@ td { font-variant-numeric: tabular-nums; }
 }
 .scband.exact { color: #7fd99b; }
 .scband.wrong { color: #e8a39c; }
+.scband.gd { color: #7fd99b; }
+.scband.winner { color: #c9cfc2; }
 
 /* ---- action bar ---- */
 .actionbar {
@@ -518,6 +537,8 @@ button.secondary.small { padding: 7px 12px; font-size: 0.82rem; }
 .earned { font-size: 0.76rem; color: var(--ink-soft); font-family: var(--mono); }
 .earned.exact { color: var(--pitch); }
 .earned.close { color: var(--pitch-dk); }
+.earned.gd { color: var(--pitch-dk); }
+.earned.winner { color: var(--ink-soft); }
 .earned.wrong { color: var(--flag-red); }
 
 /* ---- methodology (visual) ---- */

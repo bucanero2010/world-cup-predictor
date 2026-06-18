@@ -12,7 +12,7 @@ export default async function PredictorPage() {
 
   return (
     <main className="wrap">
-      <SiteHeader tagline="Scorelines that maximize your expected Superbru points. Times in Madrid — tap a match for the full breakdown." />
+      <SiteHeader tagline="Scorelines that maximize your expected points (Superbru or Penka — switch up top). Times in Madrid; tap a match for the breakdown." />
 
       <ActionBar meta={data.meta} credits={data.credits} />
 

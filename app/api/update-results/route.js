@@ -6,6 +6,7 @@ import { fetchScores } from "@/lib/scoresProvider.js";
 import { getLastUsage } from "@/lib/providerFetch.js";
 import { getAllMatches, freezeResult, setMeta, setCredit, initSchema } from "@/lib/db.js";
 import { points } from "@/lib/scoring.js";
+import { pickFor } from "@/lib/recommend.js";
 import { allowAction } from "@/lib/rateLimit.js";
 
 export const dynamic = "force-dynamic";
@@ -47,9 +48,10 @@ export async function POST() {
         skipped += 1;
         continue;
       }
-      const earned = match.recommendation
-        ? points(match.recommendation.pick, [s.home, s.away])
-        : null;
+      // Frozen earned_points is the Superbru score (legacy convenience). The UI
+      // recomputes per-game from the stored pick + final score, so this is non-binding.
+      const sbPick = match.recommendation ? pickFor(match.recommendation, "superbru").pick : null;
+      const earned = sbPick ? points(sbPick, [s.home, s.away]) : null;
       await freezeResult(s.eventId, s.home, s.away, earned);
       closed += 1;
     }

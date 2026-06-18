@@ -1,15 +1,27 @@
 "use client";
 
 import { formatKickoff } from "@/lib/time.js";
-import { bandOf } from "@/lib/scorecard.js";
+import { pickFor } from "@/lib/recommend.js";
+import { getGame } from "@/lib/scoring.js";
+import { useGame } from "./GameContext.jsx";
 
 const fmt = (p) => `${p[0]}\u2013${p[1]}`;
 
 export default function ClosedCard({ card }) {
+  const { game } = useGame();
+  const gameDef = getGame(game);
   const { result, recommendation } = card;
-  const pick = recommendation?.pick;
-  const pts = result?.earnedPoints;
-  const band = pts == null ? null : bandOf(pts);
+
+  // Recompute points for the active game from the stored pick + final score
+  // (the frozen earned_points column is Superbru-specific and not used here).
+  const block = recommendation ? pickFor(recommendation, game) : null;
+  const pick = block?.pick;
+  let pts = null;
+  let bandKey = null;
+  if (pick && result) {
+    pts = gameDef.points(pick, [result.home, result.away]);
+    bandKey = gameDef.bandOf(pts);
+  }
 
   return (
     <div className="matchrow closed">
@@ -33,10 +45,10 @@ export default function ClosedCard({ card }) {
         <div className="closedresult">
           <span className="finalscore">{result.home}&ndash;{result.away}</span>
           {pick && (
-            <span className={`earned ${band ?? ""}`}>
+            <span className={`earned ${bandKey ?? ""}`}>
               picked {fmt(pick)}
               {pts != null && ` · ${pts} pt${pts === 1 ? "" : "s"}`}
-              {band && ` (${band})`}
+              {bandKey && ` (${bandKey})`}
             </span>
           )}
         </div>

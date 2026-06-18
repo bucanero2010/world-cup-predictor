@@ -11,9 +11,9 @@ export default async function ResultsPage() {
 
   return (
     <main className="wrap">
-      <SiteHeader tagline="How the recommendations have performed. A pick scores 3 (exact), 1.5 (close), 1 (right result) or 0." />
+      <SiteHeader tagline="How the recommendations have performed. Switch between Superbru and Penka scoring up top." />
 
-      <Scorecard scorecard={data.scorecard} />
+      <Scorecard closedMatches={closed} />
 
       {closed.length === 0 ? (
         <div className="emptyprompt">

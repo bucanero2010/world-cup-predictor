@@ -1,6 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import { pickFor } from "@/lib/recommend.js";
+import { getGame } from "@/lib/scoring.js";
+import { useGame } from "./GameContext.jsx";
 
 const pct = (x) => `${(x * 100).toFixed(1)}%`;
 const fmtPick = (p) => `${p[0]}\u2013${p[1]}`;
@@ -60,9 +63,11 @@ export default function MatchDetail({ recommendation, eventId, homeTeam, awayTea
   const [rec, setRec] = useState(recommendation);
   const [refining, setRefining] = useState(false);
   const [refineMsg, setRefineMsg] = useState(null);
+  const { game } = useGame();
 
   if (!rec) return null;
-  const r = rec;
+  const r = pickFor(rec, game); // active game's pick block merged with shared model fields
+  const gameDef = getGame(game);
   const edgeLevel = r.edge?.level ?? "clear";
   const isKnockout = stage && !/group/i.test(stage);
 
@@ -143,10 +148,16 @@ export default function MatchDetail({ recommendation, eventId, homeTeam, awayTea
       </div>
 
       <div className="bands">
-        <span className="band">exact {pct(r.bands.exact.p)} → {r.bands.exact.ev.toFixed(3)}</span>
-        <span className="band">close {pct(r.bands.close.p)} → {r.bands.close.ev.toFixed(3)}</span>
-        <span className="band">result {pct(r.bands.result.p)} → {r.bands.result.ev.toFixed(3)}</span>
-        <span className="band">wrong {pct(r.bands.wrong.p)}</span>
+        {gameDef.bands.map((b) => {
+          const cell = r.bands?.[b.key];
+          if (!cell) return null;
+          return (
+            <span className="band" key={b.key}>
+              {b.label.toLowerCase()} {pct(cell.p)}
+              {cell.ev != null ? ` → ${cell.ev.toFixed(3)}` : ""}
+            </span>
+          );
+        })}
       </div>
 
       {eventId && (

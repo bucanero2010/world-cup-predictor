@@ -7,7 +7,8 @@ import { selectBookmaker } from "../lib/bookmaker.js";
 import { madridDayKey, kickoffState, relativeToKickoff, madridHour } from "../lib/time.js";
 import { isLockSoon } from "../lib/lockSoon.js";
 import { flagFor } from "../lib/flags.js";
-import { recommendForMatch, bandBreakdown } from "../lib/recommend.js";
+import { recommendForMatch, bandBreakdown, pickFor } from "../lib/recommend.js";
+import { penkaPoints } from "../lib/scoring.js";
 import { scoreGrid } from "../lib/poisson.js";
 
 // ---- Task 1.2: extended fromOdds ----
@@ -160,32 +161,31 @@ test("flagFor England returns subdivision code", () => {
 });
 
 // ---- Task 7.2: recommend ----
-test("recommendForMatch excludes zero-EV picks and ranks", () => {
-  const rec = recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] });
+test("recommendForMatch excludes zero-EV picks and ranks (active game)", () => {
+  const full = recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] });
+  const rec = pickFor(full, "superbru");
   assert.ok(rec.topPicks.length > 0);
   assert.ok(rec.topPicks.every((p) => p.ev > 0));
-  // ranks are sequential
   rec.topPicks.forEach((p, i) => assert.equal(p.rank, i + 1));
-  // recommended is a home win for a heavy favorite
-  assert.ok(rec.pick[0] >= rec.pick[1]);
+  assert.ok(rec.pick[0] >= rec.pick[1]); // home favourite
 });
 
-test("bandBreakdown probabilities sum to ~1", () => {
+test("bandBreakdown probabilities sum to ~1 (Superbru)", () => {
   const grid = scoreGrid(1.76, 0.66);
-  const b = bandBreakdown([2, 0], grid);
+  const b = bandBreakdown([2, 0], grid, "superbru");
   const sum = b.exact.p + b.close.p + b.result.p + b.wrong.p;
   assert.ok(Math.abs(sum - 1) < 1e-9);
 });
 
-test("differsFromModal is set correctly", () => {
-  const rec = recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] });
+test("differsFromModal is set correctly (active game)", () => {
+  const rec = pickFor(recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] }), "superbru");
   const isSame = rec.pick[0] === rec.modal[0] && rec.pick[1] === rec.modal[1];
   assert.equal(rec.differsFromModal, !isSame);
 });
 
 // ---- edge / reason / heatmap ----
 test("recommend includes edge with valid level and a reason string", () => {
-  const rec = recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] });
+  const rec = pickFor(recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] }), "superbru");
   assert.ok(["clear", "slight", "tossup"].includes(rec.edge.level));
   assert.ok(rec.edge.gap >= 0);
   assert.equal(typeof rec.reason, "string");
@@ -198,6 +198,24 @@ test("heatmap is a 6x6 matrix summing to <= 1", () => {
   assert.ok(rec.heatmap.every((row) => row.length === 6));
   const sum = rec.heatmap.flat().reduce((a, b) => a + b, 0);
   assert.ok(sum > 0 && sum <= 1.0001);
+});
+
+// ---- multi-game (Superbru + Penka) ----
+test("recommendForMatch produces both game blocks", () => {
+  const rec = recommendForMatch({ oneXtwo: [1.44, 4.7, 9.0], totalLine: 2.25, overUnder: [1.93, 1.97] });
+  assert.ok(rec.games.superbru && rec.games.penka);
+  assert.ok(Array.isArray(rec.games.superbru.pick));
+  assert.ok(Array.isArray(rec.games.penka.pick));
+  // shared model fields live at top level, not per game
+  assert.ok(rec.lambda && rec.heatmap && rec.outcome);
+});
+
+test("penkaPoints scores 5/3/2/0 correctly", () => {
+  assert.equal(penkaPoints([2, 0], [2, 0]), 5); // exact
+  assert.equal(penkaPoints([3, 1], [2, 0]), 3); // same GD (+2)
+  assert.equal(penkaPoints([1, 0], [2, 0]), 2); // right winner, wrong GD
+  assert.equal(penkaPoints([1, 2], [2, 0]), 0); // wrong outcome
+  assert.equal(penkaPoints([1, 1], [2, 2]), 3); // correct draw (GD 0)
 });
 
 test("fromOdds fits an alt-totals ladder when provided", () => {
